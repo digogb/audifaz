@@ -7,8 +7,8 @@ RUN npm run build
 
 FROM python:3.12-slim
 WORKDIR /app
-COPY backend/pyproject.toml .
-RUN pip install --no-cache-dir -e .
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/app ./app
 COPY plano.md .
 COPY --from=frontend-build /frontend/dist ./static
