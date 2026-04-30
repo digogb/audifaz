@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "audifaz"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[all]>=0.115",
+    "sqlalchemy[asyncio]>=2.0",
+    "aiosqlite>=0.20",
+    "anthropic>=0.50",
+    "python-multipart>=0.0.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
