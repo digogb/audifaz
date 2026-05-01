@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import Topic, StudyDay
+from ..models import Topic, StudyDay, User
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/api/topics", tags=["topics"])
 
 
 @router.put("/{topic_id}/toggle")
-async def toggle_topic(topic_id: int, db: AsyncSession = Depends(get_db)):
+async def toggle_topic(topic_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     topic = await db.get(Topic, topic_id)
     if not topic:
         raise HTTPException(404)

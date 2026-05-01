@@ -2,9 +2,32 @@ import axios from 'axios'
 
 const api = axios.create({ baseURL: '/api' })
 
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('audifaz_token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
+
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('audifaz_token')
+      localStorage.removeItem('audifaz_username')
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
+
+// Auth
+export const authLogin = (username, password) => api.post('/auth/login', { username, password })
+export const authRegister = (username, password) => api.post('/auth/register', { username, password })
+
 // Days
 export const getToday = () => api.get('/days/today')
 export const getDay = (id) => api.get(`/days/${id}`)
+export const getDayByDate = (dateStr) => api.get(`/days/by-date/${dateStr}`)
 export const getWeekContext = (id) => api.get(`/days/${id}/week-context`)
 export const updateDayStatus = (id, status) => api.put(`/days/${id}/status`, { status })
 export const updateDayNotes = (id, notas) => api.put(`/days/${id}/notes`, { notas })
@@ -14,37 +37,10 @@ export const toggleTopic = (id) => api.put(`/topics/${id}/toggle`)
 
 // Material
 export const getMaterial = (dayId) => api.get(`/days/${dayId}/material`)
+export const generateMaterial = (dayId, model = 'claude-sonnet-4-6') =>
+  api.post(`/days/${dayId}/material/generate?model=${model}`, {}, { timeout: 300000 })
 export const recordAttempt = (questionId, alternativa_escolhida, observacao) =>
   api.post(`/days/questions/${questionId}/attempt`, { alternativa_escolhida, observacao })
-
-export async function* streamMaterial(dayId, model = 'claude-sonnet-4-6') {
-  const response = await fetch(`/api/days/${dayId}/material/generate?model=${model}`, {
-    method: 'POST',
-  })
-  if (!response.ok) throw new Error('Falha ao gerar material')
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop()
-
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue
-      const data = line.slice(6).trim()
-      if (data === '[DONE]') return
-      try {
-        yield JSON.parse(data)
-      } catch {}
-    }
-  }
-}
 
 // Errors
 export const getErrors = (params) => api.get('/errors', { params })

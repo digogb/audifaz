@@ -109,10 +109,8 @@ def _calc_cache_ratio(usage: dict) -> float:
     return round(usage.get("cache_read_input_tokens", 0) / total_input, 3)
 
 
-async def generate_material_stream(topics: list[str], model: str = "claude-sonnet-4-6"):
-    """Async generator yielding SSE-ready dicts for study material generation."""
+def _build_params(topics: list[str], model: str) -> dict:
     topics_text = "\n".join(f"- {t}" for t in topics)
-
     user_message = f"""Gere o material de estudo para os tópicos do dia:
 
 {topics_text}
@@ -157,6 +155,41 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
     else:
         params["output_config"] = {"effort": "medium"}
 
+    return params
+
+
+async def generate_material(topics: list[str], model: str = "claude-sonnet-4-6") -> tuple[str, list, dict]:
+    """Non-streaming generation. Returns (content_md, questions_data, usage_dict)."""
+    params = _build_params(topics, model)
+    response = await _client.messages.create(**params)
+
+    content_md = ""
+    questions_data = []
+
+    for block in response.content:
+        if block.type == "text":
+            content_md += block.text
+        elif block.type == "tool_use" and block.name == "registrar_questoes":
+            try:
+                questions_data = block.input.get("questoes", [])
+            except Exception:
+                questions_data = []
+
+    usage = response.usage
+    usage_dict = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+    }
+
+    return content_md, questions_data, usage_dict
+
+
+async def generate_material_stream(topics: list[str], model: str = "claude-sonnet-4-6"):
+    """Async generator yielding SSE-ready dicts for study material generation."""
+    params = _build_params(topics, model)
+
     in_tool_use = False
     tool_input_buffer = ""
 
@@ -183,7 +216,7 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
                     in_tool_use = False
                     tool_input_buffer = ""
 
-        final = stream.get_final_message()
+        final = await stream.get_final_message()
         usage = final.usage
         usage_dict = {
             "input_tokens": usage.input_tokens,

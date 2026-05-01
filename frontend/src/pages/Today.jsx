@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { format, parseISO } from 'date-fns'
+import { useSearchParams } from 'react-router-dom'
+import { format, parseISO, addDays, subDays } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Sparkles, CheckSquare, Square, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import {
+  Sparkles, CheckSquare, Square, ChevronDown, ChevronUp,
+  RefreshCw, CheckCircle2, ChevronLeft, ChevronRight,
+} from 'lucide-react'
 import * as api from '../api'
 
 const TYPE_LABELS = {
@@ -94,26 +98,29 @@ function QuestionCard({ q, onAttempt }) {
 }
 
 export default function Today() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [day, setDay] = useState(null)
   const [week, setWeek] = useState(null)
   const [material, setMaterial] = useState(null)
-  const [generating, setGenerating] = useState(false)
-  const [streamContent, setStreamContent] = useState('')
   const [questions, setQuestions] = useState([])
+  const [generating, setGenerating] = useState(false)
   const [model, setModel] = useState('claude-sonnet-4-6')
   const [error, setError] = useState(null)
-  const [usageInfo, setUsageInfo] = useState(null)
   const [notes, setNotes] = useState('')
   const notesTimer = useRef(null)
-  const contentRef = useRef('')
 
-  useEffect(() => {
-    loadDay()
-  }, [])
+  const dateParam = searchParams.get('data')
 
-  async function loadDay() {
+  const loadDay = useCallback(async (dateStr) => {
+    setError(null)
+    setDay(null)
+    setWeek(null)
+    setMaterial(null)
+    setQuestions([])
     try {
-      const dayRes = await api.getToday()
+      const dayRes = dateStr
+        ? await api.getDayByDate(dateStr)
+        : await api.getToday()
       setDay(dayRes.data)
       setNotes(dayRes.data.notas || '')
 
@@ -124,11 +131,39 @@ export default function Today() {
       if (weekRes.status === 'fulfilled') setWeek(weekRes.value.data)
       if (matRes.status === 'fulfilled') {
         setMaterial(matRes.value.data)
-        setStreamContent(matRes.value.data.conteudo_md)
-        setQuestions(matRes.value.data.questions)
+        setQuestions(matRes.value.data.questions || [])
       }
     } catch (e) {
       setError('Erro ao carregar dia de estudo')
+    }
+  }, [])
+
+  useEffect(() => {
+    loadDay(dateParam)
+  }, [dateParam, loadDay])
+
+  function navigate(dateStr) {
+    if (dateStr) {
+      setSearchParams({ data: dateStr })
+    } else {
+      setSearchParams({})
+    }
+  }
+
+  function goPrev() {
+    if (!day) return
+    const prev = subDays(parseISO(day.data), 1)
+    navigate(format(prev, 'yyyy-MM-dd'))
+  }
+
+  function goNext() {
+    if (!day) return
+    const next = addDays(parseISO(day.data), 1)
+    const today = format(new Date(), 'yyyy-MM-dd')
+    if (format(next, 'yyyy-MM-dd') === today) {
+      navigate(null)
+    } else {
+      navigate(format(next, 'yyyy-MM-dd'))
     }
   }
 
@@ -140,7 +175,6 @@ export default function Today() {
         t.id === topicId ? { ...t, concluido: res.data.concluido } : t
       ),
     }))
-    // Reload to get updated status
     const updated = await api.getDay(day.id)
     setDay(updated.data)
   }
@@ -157,30 +191,15 @@ export default function Today() {
   async function handleGenerate() {
     setGenerating(true)
     setError(null)
-    setStreamContent('')
+    setMaterial(null)
     setQuestions([])
-    setUsageInfo(null)
-    contentRef.current = ''
 
     try {
-      for await (const event of api.streamMaterial(day.id, model)) {
-        if (event.type === 'content') {
-          contentRef.current += event.chunk
-          setStreamContent(contentRef.current)
-        } else if (event.type === 'done') {
-          setUsageInfo(event)
-        } else if (event.type === 'error') {
-          setError(event.message)
-        }
-      }
-      // Reload material to get IDs
-      try {
-        const matRes = await api.getMaterial(day.id)
-        setMaterial(matRes.data)
-        setQuestions(matRes.data.questions)
-      } catch {}
+      const res = await api.generateMaterial(day.id, model)
+      setMaterial(res.data)
+      setQuestions(res.data.questions || [])
     } catch (e) {
-      setError(e.message)
+      setError(e.response?.data?.detail || e.message || 'Erro ao gerar material')
     } finally {
       setGenerating(false)
     }
@@ -196,13 +215,11 @@ export default function Today() {
 
   const dateLabel = format(parseISO(day.data), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })
   const typeInfo = TYPE_LABELS[day.tipo] || TYPE_LABELS.util
-
-  const allTopicsDone = day.topics.every(t => t.concluido)
-  const someTopicsDone = day.topics.some(t => t.concluido)
+  const isToday = !dateParam || dateParam === format(new Date(), 'yyyy-MM-dd')
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header with navigation */}
       <div className="space-y-1">
         {day.phase && (
           <p className="text-xs text-slate-500 uppercase tracking-wider">
@@ -215,7 +232,31 @@ export default function Today() {
           </p>
         )}
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-xl font-semibold text-slate-100 capitalize">{dateLabel}</h1>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={goPrev}
+              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+              title="Dia anterior"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              onClick={goNext}
+              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+              title="Próximo dia"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+          <h1 className="text-xl font-semibold text-slate-100 capitalize flex-1">{dateLabel}</h1>
+          {!isToday && (
+            <button
+              onClick={() => navigate(null)}
+              className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+            >
+              Ir para hoje
+            </button>
+          )}
           <span className={`text-xs px-2 py-0.5 rounded-full ${typeInfo.cls}`}>{typeInfo.label}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LABELS[day.status]}`}>
             {day.status}
@@ -223,24 +264,29 @@ export default function Today() {
         </div>
       </div>
 
-      {/* Week mini-calendar */}
+      {/* Week mini-calendar — clickable */}
       {week?.days && (
         <div className="flex gap-1.5">
           {week.days.map(d => (
-            <div
+            <button
               key={d.id}
-              className={`flex-1 rounded py-1 text-center text-xs ${
-                d.is_today
+              onClick={() => {
+                const today = format(new Date(), 'yyyy-MM-dd')
+                if (d.data === today) navigate(null)
+                else navigate(d.data)
+              }}
+              className={`flex-1 rounded py-1 text-center text-xs transition-colors ${
+                d.data === day.data
                   ? 'bg-indigo-600 text-white font-bold'
                   : d.status === 'concluido'
-                  ? 'bg-emerald-900/50 text-emerald-400'
+                  ? 'bg-emerald-900/50 text-emerald-400 hover:bg-emerald-900'
                   : d.status === 'em_andamento'
-                  ? 'bg-amber-900/50 text-amber-400'
-                  : 'bg-slate-800 text-slate-500'
+                  ? 'bg-amber-900/50 text-amber-400 hover:bg-amber-900'
+                  : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
               }`}
             >
               {format(parseISO(d.data), 'EEE', { locale: ptBR }).slice(0, 3)}
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -309,44 +355,46 @@ export default function Today() {
 
         {error && <p className="text-rose-400 text-sm">{error}</p>}
 
-        {usageInfo && (
-          <p className="text-xs text-slate-600">
-            {usageInfo.usage?.input_tokens?.toLocaleString()} tokens entrada ·{' '}
-            {usageInfo.usage?.output_tokens?.toLocaleString()} saída ·{' '}
-            ${usageInfo.custo_usd?.toFixed(4)} ·{' '}
-            cache {Math.round((usageInfo.cache_hit_ratio || 0) * 100)}%
-          </p>
+        {generating && (
+          <div className="flex items-center gap-2 text-xs text-amber-500">
+            <RefreshCw size={11} className="animate-spin" />
+            Gerando material... isso pode levar até 1 minuto
+          </div>
         )}
 
-        {(streamContent || generating) && (
-          <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
-            <div className="prose-study">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamContent}</ReactMarkdown>
+        {material && !generating && (
+          <>
+            {material.custo_usd && (
+              <p className="text-xs text-slate-600">
+                {material.tokens_in?.toLocaleString()} tokens entrada ·{' '}
+                {material.tokens_out?.toLocaleString()} saída ·{' '}
+                ${material.custo_usd?.toFixed(4)} ·{' '}
+                cache {Math.round((material.cache_hit_ratio || 0) * 100)}%
+              </p>
+            )}
+
+            <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+              <div className="prose-study">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{material.conteudo_md}</ReactMarkdown>
+              </div>
             </div>
-            {generating && !streamContent && (
-              <div className="flex gap-1">
-                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+
+            {questions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-medium text-slate-300">Questões FCC ({questions.length})</h3>
+                  <span className="text-xs text-slate-600">
+                    {questions.filter(q => q.attempt?.acertou).length} corretas ·{' '}
+                    {questions.filter(q => q.attempt && !q.attempt.acertou).length} erradas ·{' '}
+                    {questions.filter(q => !q.attempt).length} não respondidas
+                  </span>
+                </div>
+                {questions.map(q => (
+                  <QuestionCard key={q.id} q={q} />
+                ))}
               </div>
             )}
-          </div>
-        )}
-
-        {questions.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-medium text-slate-300">Questões FCC ({questions.length})</h3>
-              <span className="text-xs text-slate-600">
-                {questions.filter(q => q.attempt?.acertou).length} corretas ·{' '}
-                {questions.filter(q => q.attempt && !q.attempt.acertou).length} erradas ·{' '}
-                {questions.filter(q => !q.attempt).length} não respondidas
-              </span>
-            </div>
-            {questions.map(q => (
-              <QuestionCard key={q.id} q={q} />
-            ))}
-          </div>
+          </>
         )}
       </div>
     </div>

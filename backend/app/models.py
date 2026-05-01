@@ -1,4 +1,4 @@
-from sqlalchemy import String, Integer, Boolean, Date, DateTime, Float, ForeignKey, JSON
+from sqlalchemy import String, Integer, Boolean, Date, DateTime, Float, ForeignKey, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship, Mapped, mapped_column, DeclarativeBase
 from datetime import datetime, date
 from typing import Optional, List
@@ -6,6 +6,14 @@ from typing import Optional, List
 
 class Base(DeclarativeBase):
     pass
+
+
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Phase(Base):
@@ -81,23 +89,24 @@ class GeneratedQuestion(Base):
     dificuldade: Mapped[str] = mapped_column(String(20), default="medio")
     ordem: Mapped[int] = mapped_column(default=0)
     material: Mapped["StudyMaterial"] = relationship(back_populates="questions")
-    attempt: Mapped[Optional["QuestionAttempt"]] = relationship(back_populates="question", uselist=False)
 
 
 class QuestionAttempt(Base):
     __tablename__ = "question_attempts"
+    __table_args__ = (UniqueConstraint("question_id", "user_id"),)
     id: Mapped[int] = mapped_column(primary_key=True)
-    question_id: Mapped[int] = mapped_column(ForeignKey("generated_questions.id"), unique=True)
+    question_id: Mapped[int] = mapped_column(ForeignKey("generated_questions.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     alternativa_escolhida: Mapped[str] = mapped_column(String(1))
     acertou: Mapped[bool] = mapped_column(Boolean)
     respondido_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     observacao: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    question: Mapped["GeneratedQuestion"] = relationship(back_populates="attempt")
 
 
 class ErrorEntry(Base):
     __tablename__ = "error_entries"
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     origem: Mapped[str] = mapped_column(String(10), default="manual")  # gerada|manual
     question_id: Mapped[Optional[int]] = mapped_column(ForeignKey("generated_questions.id"), nullable=True)
     data: Mapped[date] = mapped_column(Date, index=True)
@@ -114,6 +123,7 @@ class ErrorEntry(Base):
 class MockExam(Base):
     __tablename__ = "mock_exams"
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
     data: Mapped[date] = mapped_column(Date)
     tipo: Mapped[str] = mapped_column(String(30))  # ti_especifico|conhec_gerais|discursiva|completo
     observacoes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

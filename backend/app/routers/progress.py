@@ -1,17 +1,17 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import StudyDay, Topic, Phase, Week, MockExam, MockExamResult
+from ..models import StudyDay, Topic, Phase, Week, MockExam, MockExamResult, User
 from ..schemas import ProgressDay, PhaseProgress
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 
 
 @router.get("")
-async def get_progress(db: AsyncSession = Depends(get_db)):
-    # All study days
+async def get_progress(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     days_result = await db.execute(
         select(StudyDay).options(selectinload(StudyDay.topics)).order_by(StudyDay.data)
     )
@@ -28,7 +28,6 @@ async def get_progress(db: AsyncSession = Depends(get_db)):
         for d in days
     ]
 
-    # Phase progress
     phases_result = await db.execute(
         select(Phase).options(
             selectinload(Phase.weeks).selectinload(Week.days)
@@ -49,10 +48,11 @@ async def get_progress(db: AsyncSession = Depends(get_db)):
             "pct": round(done / total * 100, 1) if total > 0 else 0.0,
         })
 
-    # Mock exam evolution
+    # Mock exam evolution filtered by user
     mocks_result = await db.execute(
         select(MockExam)
         .options(selectinload(MockExam.results))
+        .where(MockExam.user_id == current_user.id)
         .order_by(MockExam.data)
     )
     mocks = mocks_result.scalars().all()

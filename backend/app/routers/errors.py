@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import ErrorEntry
+from ..models import ErrorEntry, User
 from ..schemas import ErrorEntryOut, ErrorEntryCreate
+from ..auth import get_current_user
 from typing import Optional
 
 router = APIRouter(prefix="/api/errors", tags=["errors"])
@@ -20,8 +21,9 @@ async def list_errors(
     revisado: Optional[bool] = None,
     dias: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    q = select(ErrorEntry).order_by(ErrorEntry.data.desc())
+    q = select(ErrorEntry).where(ErrorEntry.user_id == current_user.id).order_by(ErrorEntry.data.desc())
 
     if disciplina:
         q = q.where(ErrorEntry.disciplina == disciplina)
@@ -32,7 +34,7 @@ async def list_errors(
     elif revisado is False:
         q = q.where(ErrorEntry.revisado_em.is_(None))
     if dias:
-        from datetime import date, timedelta
+        from datetime import timedelta
         cutoff = datetime.now(TZ).date() - timedelta(days=dias)
         q = q.where(ErrorEntry.data >= cutoff)
 
@@ -41,11 +43,12 @@ async def list_errors(
 
 
 @router.get("/stale-count")
-async def stale_count(db: AsyncSession = Depends(get_db)):
+async def stale_count(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     from datetime import timedelta
     cutoff = datetime.now(TZ) - timedelta(days=7)
     result = await db.execute(
         select(ErrorEntry)
+        .where(ErrorEntry.user_id == current_user.id)
         .where(ErrorEntry.revisado_em.is_(None))
         .where(ErrorEntry.data <= cutoff.date())
     )
@@ -53,8 +56,8 @@ async def stale_count(db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=ErrorEntryOut)
-async def create_error(body: ErrorEntryCreate, db: AsyncSession = Depends(get_db)):
-    error = ErrorEntry(**body.model_dump())
+async def create_error(body: ErrorEntryCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    error = ErrorEntry(**body.model_dump(), user_id=current_user.id)
     db.add(error)
     await db.commit()
     await db.refresh(error)
@@ -62,9 +65,9 @@ async def create_error(body: ErrorEntryCreate, db: AsyncSession = Depends(get_db
 
 
 @router.put("/{error_id}/review")
-async def mark_reviewed(error_id: int, db: AsyncSession = Depends(get_db)):
+async def mark_reviewed(error_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     error = await db.get(ErrorEntry, error_id)
-    if not error:
+    if not error or error.user_id != current_user.id:
         raise HTTPException(404)
     error.revisado_em = datetime.utcnow()
     await db.commit()
@@ -72,9 +75,9 @@ async def mark_reviewed(error_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/{error_id}")
-async def delete_error(error_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_error(error_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     error = await db.get(ErrorEntry, error_id)
-    if not error:
+    if not error or error.user_id != current_user.id:
         raise HTTPException(404)
     await db.delete(error)
     await db.commit()
@@ -82,6 +85,8 @@ async def delete_error(error_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/disciplines")
-async def list_disciplines(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(ErrorEntry.disciplina).distinct())
+async def list_disciplines(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    result = await db.execute(
+        select(ErrorEntry.disciplina).where(ErrorEntry.user_id == current_user.id).distinct()
+    )
     return sorted(r[0] for r in result.all())

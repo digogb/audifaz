@@ -5,8 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import StudyDay, Topic, Week, Phase
+from ..models import StudyDay, Topic, Week, Phase, User
 from ..schemas import StudyDayOut, StudyDayWithPhase
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/api/days", tags=["days"])
 
@@ -33,7 +34,7 @@ async def _load_day(db: AsyncSession, day_id: int) -> StudyDay:
 
 
 @router.get("/today", response_model=StudyDayWithPhase)
-async def get_today(db: AsyncSession = Depends(get_db)):
+async def get_today(db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     today = _today()
     result = await db.execute(
         select(StudyDay)
@@ -68,7 +69,7 @@ async def get_today(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{day_id}", response_model=StudyDayWithPhase)
-async def get_day(day_id: int, db: AsyncSession = Depends(get_db)):
+async def get_day(day_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     day = await _load_day(db, day_id)
     out = StudyDayWithPhase.model_validate(day)
     if day.week and day.week.phase:
@@ -77,8 +78,35 @@ async def get_day(day_id: int, db: AsyncSession = Depends(get_db)):
     return out
 
 
+@router.get("/by-date/{date_str}", response_model=StudyDayWithPhase)
+async def get_day_by_date(date_str: str, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
+    from datetime import date as date_type
+    try:
+        target = date_type.fromisoformat(date_str)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(400, "Data inválida, use YYYY-MM-DD")
+    result = await db.execute(
+        select(StudyDay)
+        .options(
+            selectinload(StudyDay.topics),
+            selectinload(StudyDay.week).selectinload(Week.phase),
+        )
+        .where(StudyDay.data == target)
+    )
+    day = result.scalar_one_or_none()
+    if not day:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Dia não encontrado")
+    out = StudyDayWithPhase.model_validate(day)
+    if day.week and day.week.phase:
+        from ..schemas import PhaseOut
+        out.phase = PhaseOut.model_validate(day.week.phase)
+    return out
+
+
 @router.put("/{day_id}/status")
-async def update_status(day_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+async def update_status(day_id: int, body: dict, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     day = await db.get(StudyDay, day_id)
     if not day:
         raise HTTPException(404)
@@ -91,7 +119,7 @@ async def update_status(day_id: int, body: dict, db: AsyncSession = Depends(get_
 
 
 @router.put("/{day_id}/notes")
-async def update_notes(day_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+async def update_notes(day_id: int, body: dict, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     day = await db.get(StudyDay, day_id)
     if not day:
         raise HTTPException(404)
@@ -101,7 +129,7 @@ async def update_notes(day_id: int, body: dict, db: AsyncSession = Depends(get_d
 
 
 @router.get("/{day_id}/week-context")
-async def week_context(day_id: int, db: AsyncSession = Depends(get_db)):
+async def week_context(day_id: int, db: AsyncSession = Depends(get_db), _: User = Depends(get_current_user)):
     day = await _load_day(db, day_id)
     if not day.week:
         return {}

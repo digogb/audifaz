@@ -1,136 +1,235 @@
-import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
-from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry
-from ..schemas import StudyMaterialOut, AttemptCreate, GeneratedQuestionOut
+from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User
+from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
+from ..claude_client import _calc_cost, _calc_cache_ratio
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/api/days", tags=["materials"])
 
 
 @router.get("/{day_id}/material", response_model=StudyMaterialOut)
-async def get_material(day_id: int, db: AsyncSession = Depends(get_db)):
+async def get_material(
+    day_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     result = await db.execute(
         select(StudyMaterial)
-        .options(
-            selectinload(StudyMaterial.questions).selectinload(GeneratedQuestion.attempt)
-        )
+        .options(selectinload(StudyMaterial.questions))
         .where(StudyMaterial.study_day_id == day_id)
     )
     material = result.scalar_one_or_none()
     if not material:
         raise HTTPException(404, "Material não gerado ainda")
-    return material
+
+    question_ids = [q.id for q in material.questions]
+    attempts_by_question = {}
+    if question_ids:
+        attempts_result = await db.execute(
+            select(QuestionAttempt).where(
+                QuestionAttempt.question_id.in_(question_ids),
+                QuestionAttempt.user_id == current_user.id,
+            )
+        )
+        for att in attempts_result.scalars().all():
+            attempts_by_question[att.question_id] = att
+
+    questions_out = []
+    for q in sorted(material.questions, key=lambda x: x.ordem):
+        att = attempts_by_question.get(q.id)
+        att_out = None
+        if att:
+            att_out = {
+                "id": att.id,
+                "alternativa_escolhida": att.alternativa_escolhida,
+                "acertou": att.acertou,
+                "respondido_em": att.respondido_em,
+                "observacao": att.observacao,
+            }
+        questions_out.append({
+            "id": q.id,
+            "enunciado": q.enunciado,
+            "alternativas": q.alternativas,
+            "gabarito": q.gabarito,
+            "comentario": q.comentario,
+            "disciplina": q.disciplina,
+            "dificuldade": q.dificuldade,
+            "ordem": q.ordem,
+            "attempt": att_out,
+        })
+
+    return {
+        "id": material.id,
+        "gerado_em": material.gerado_em,
+        "modelo": material.modelo,
+        "conteudo_md": material.conteudo_md,
+        "tokens_in": material.tokens_in,
+        "tokens_out": material.tokens_out,
+        "custo_usd": material.custo_usd,
+        "cache_hit_ratio": material.cache_hit_ratio,
+        "questions": questions_out,
+    }
 
 
-@router.post("/{day_id}/material/generate")
+@router.post("/{day_id}/material/generate", response_model=StudyMaterialOut)
 async def generate_material(
     day_id: int,
     model: str = Query("claude-sonnet-4-6"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     if model not in ("claude-sonnet-4-6", "claude-opus-4-7"):
         raise HTTPException(400, "Modelo inválido")
 
-    return StreamingResponse(
-        _stream(day_id, model),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+    result = await db.execute(
+        select(StudyDay)
+        .options(selectinload(StudyDay.topics))
+        .where(StudyDay.id == day_id)
     )
+    day = result.scalar_one_or_none()
+    if not day:
+        raise HTTPException(404, "Dia não encontrado")
+
+    topics = [t.descricao for t in day.topics]
+    if not topics:
+        raise HTTPException(400, "Nenhum tópico encontrado")
+
+    content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
+
+    # Replace existing material
+    existing = await db.execute(
+        select(StudyMaterial).where(StudyMaterial.study_day_id == day_id)
+    )
+    existing_material = existing.scalar_one_or_none()
+    if existing_material:
+        await db.execute(
+            delete(GeneratedQuestion).where(
+                GeneratedQuestion.study_material_id == existing_material.id
+            )
+        )
+        await db.delete(existing_material)
+        await db.flush()
+
+    material = StudyMaterial(
+        study_day_id=day_id,
+        modelo=model,
+        conteudo_md=content_md,
+        tokens_in=usage_dict.get("input_tokens"),
+        tokens_out=usage_dict.get("output_tokens"),
+        custo_usd=_calc_cost(model, usage_dict),
+        cache_hit_ratio=_calc_cache_ratio(usage_dict),
+    )
+    db.add(material)
+    await db.flush()
+
+    for i, q in enumerate(questions_data):
+        gq = GeneratedQuestion(
+            study_material_id=material.id,
+            enunciado=q.get("enunciado", ""),
+            alternativas=q.get("alternativas", {}),
+            gabarito=q.get("gabarito", "A"),
+            comentario=q.get("comentario", ""),
+            disciplina=q.get("disciplina", ""),
+            dificuldade=q.get("dificuldade", "medio"),
+            ordem=i,
+        )
+        db.add(gq)
+
+    await db.commit()
+
+    # Return full material with empty attempts for current user
+    questions_out = []
+    for gq in sorted(
+        await _reload_questions(db, material.id), key=lambda x: x.ordem
+    ):
+        questions_out.append({
+            "id": gq.id,
+            "enunciado": gq.enunciado,
+            "alternativas": gq.alternativas,
+            "gabarito": gq.gabarito,
+            "comentario": gq.comentario,
+            "disciplina": gq.disciplina,
+            "dificuldade": gq.dificuldade,
+            "ordem": gq.ordem,
+            "attempt": None,
+        })
+
+    return {
+        "id": material.id,
+        "gerado_em": material.gerado_em,
+        "modelo": material.modelo,
+        "conteudo_md": material.conteudo_md,
+        "tokens_in": material.tokens_in,
+        "tokens_out": material.tokens_out,
+        "custo_usd": material.custo_usd,
+        "cache_hit_ratio": material.cache_hit_ratio,
+        "questions": questions_out,
+    }
 
 
-async def _stream(day_id: int, model: str):
+async def _reload_questions(db: AsyncSession, material_id: int) -> list:
+    result = await db.execute(
+        select(GeneratedQuestion).where(GeneratedQuestion.study_material_id == material_id)
+    )
+    return result.scalars().all()
+
+
+async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
+    """Used by cron job to generate material for a day without auth."""
     async with AsyncSessionLocal() as db:
-        # Load day + topics
+        # Skip if material already exists
+        existing = await db.execute(
+            select(StudyMaterial).where(StudyMaterial.study_day_id == day_id)
+        )
+        if existing.scalar_one_or_none():
+            return
+
         result = await db.execute(
             select(StudyDay)
             .options(selectinload(StudyDay.topics))
             .where(StudyDay.id == day_id)
         )
         day = result.scalar_one_or_none()
-        if not day:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Dia não encontrado'})}\n\n"
-            yield "data: [DONE]\n\n"
+        if not day or not day.topics:
             return
 
         topics = [t.descricao for t in day.topics]
-        if not topics:
-            yield f"data: {json.dumps({'type': 'error', 'message': 'Nenhum tópico encontrado'})}\n\n"
-            yield "data: [DONE]\n\n"
-            return
 
-        full_content = []
-        questions_data = []
-        usage_data = {}
+    content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
 
-        try:
-            async for event in claude_client.generate_material_stream(topics, model):
-                if event["type"] == "content":
-                    full_content.append(event["chunk"])
-                elif event["type"] == "questions":
-                    questions_data = event["data"]
-                elif event["type"] == "done":
-                    usage_data = event
+    async with AsyncSessionLocal() as db:
+        material = StudyMaterial(
+            study_day_id=day_id,
+            modelo=model,
+            conteudo_md=content_md,
+            tokens_in=usage_dict.get("input_tokens"),
+            tokens_out=usage_dict.get("output_tokens"),
+            custo_usd=_calc_cost(model, usage_dict),
+            cache_hit_ratio=_calc_cache_ratio(usage_dict),
+        )
+        db.add(material)
+        await db.flush()
 
-                yield f"data: {json.dumps(event)}\n\n"
-
-            # Save to DB
-            content_md = "".join(full_content)
-
-            # Delete existing material
-            existing = await db.execute(
-                select(StudyMaterial).where(StudyMaterial.study_day_id == day_id)
+        for i, q in enumerate(questions_data):
+            gq = GeneratedQuestion(
+                study_material_id=material.id,
+                enunciado=q.get("enunciado", ""),
+                alternativas=q.get("alternativas", {}),
+                gabarito=q.get("gabarito", "A"),
+                comentario=q.get("comentario", ""),
+                disciplina=q.get("disciplina", ""),
+                dificuldade=q.get("dificuldade", "medio"),
+                ordem=i,
             )
-            existing_material = existing.scalar_one_or_none()
-            if existing_material:
-                await db.execute(
-                    delete(GeneratedQuestion).where(
-                        GeneratedQuestion.study_material_id == existing_material.id
-                    )
-                )
-                await db.delete(existing_material)
-                await db.flush()
+            db.add(gq)
 
-            material = StudyMaterial(
-                study_day_id=day_id,
-                modelo=model,
-                conteudo_md=content_md,
-                tokens_in=usage_data.get("usage", {}).get("input_tokens"),
-                tokens_out=usage_data.get("usage", {}).get("output_tokens"),
-                custo_usd=usage_data.get("custo_usd"),
-                cache_hit_ratio=usage_data.get("cache_hit_ratio"),
-            )
-            db.add(material)
-            await db.flush()
-
-            for i, q in enumerate(questions_data):
-                gq = GeneratedQuestion(
-                    study_material_id=material.id,
-                    enunciado=q.get("enunciado", ""),
-                    alternativas=q.get("alternativas", {}),
-                    gabarito=q.get("gabarito", "A"),
-                    comentario=q.get("comentario", ""),
-                    disciplina=q.get("disciplina", ""),
-                    dificuldade=q.get("dificuldade", "medio"),
-                    ordem=i,
-                )
-                db.add(gq)
-
-            await db.commit()
-
-        except Exception as e:
-            await db.rollback()
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
-
-        yield "data: [DONE]\n\n"
+        await db.commit()
 
 
 @router.post("/questions/{question_id}/attempt")
@@ -138,6 +237,7 @@ async def record_attempt(
     question_id: int,
     body: AttemptCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     question = await db.get(GeneratedQuestion, question_id)
     if not question:
@@ -145,9 +245,11 @@ async def record_attempt(
 
     acertou = body.alternativa_escolhida.upper() == question.gabarito.upper()
 
-    # Update existing or create new attempt
     existing = await db.execute(
-        select(QuestionAttempt).where(QuestionAttempt.question_id == question_id)
+        select(QuestionAttempt).where(
+            QuestionAttempt.question_id == question_id,
+            QuestionAttempt.user_id == current_user.id,
+        )
     )
     attempt = existing.scalar_one_or_none()
     if attempt:
@@ -158,25 +260,28 @@ async def record_attempt(
     else:
         attempt = QuestionAttempt(
             question_id=question_id,
+            user_id=current_user.id,
             alternativa_escolhida=body.alternativa_escolhida.upper(),
             acertou=acertou,
             observacao=body.observacao,
         )
         db.add(attempt)
 
-    # Auto-create error entry if wrong
     if not acertou:
-        from datetime import date, timezone
+        from datetime import date
         from zoneinfo import ZoneInfo
         today = datetime.now(ZoneInfo("America/Fortaleza")).date()
 
-        # Check if error already exists for this question
         existing_error = await db.execute(
-            select(ErrorEntry).where(ErrorEntry.question_id == question_id)
+            select(ErrorEntry).where(
+                ErrorEntry.question_id == question_id,
+                ErrorEntry.user_id == current_user.id,
+            )
         )
         if not existing_error.scalar_one_or_none():
             error = ErrorEntry(
                 origem="gerada",
+                user_id=current_user.id,
                 question_id=question_id,
                 data=today,
                 disciplina=question.disciplina,

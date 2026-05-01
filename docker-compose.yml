@@ -9,5 +9,8 @@ services:
       - ./data:/data
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - SECRET_KEY=${SECRET_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - TZ=America/Fortaleza
     restart: unless-stopped

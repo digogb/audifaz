@@ -3,6 +3,16 @@ from datetime import date, datetime
 from typing import Optional, List
 
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenOut(BaseModel):
+    token: str
+    username: str
+
+
 class TopicOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
