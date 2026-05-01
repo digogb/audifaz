@@ -6,22 +6,42 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   Sparkles, CheckSquare, Square, ChevronDown, ChevronUp,
-  RefreshCw, CheckCircle2, ChevronLeft, ChevronRight,
+  RefreshCw, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import * as api from '../api'
 
 const TYPE_LABELS = {
-  util: { label: 'Dia útil', cls: 'bg-slate-700 text-slate-300' },
-  sabado: { label: 'Sábado', cls: 'bg-blue-900 text-blue-300' },
-  domingo: { label: 'Domingo', cls: 'bg-purple-900 text-purple-300' },
-  feriado: { label: 'Feriado', cls: 'bg-amber-900 text-amber-300' },
-  prova: { label: '🎯 PROVA', cls: 'bg-rose-900 text-rose-300 font-bold' },
+  util:    { label: 'Dia útil',  cls: 'bg-gray-100 text-text-muted' },
+  sabado:  { label: 'Sábado',   cls: 'bg-blue-50 text-blue-600' },
+  domingo: { label: 'Domingo',  cls: 'bg-purple-50 text-purple-600' },
+  feriado: { label: 'Feriado',  cls: 'bg-amber-50 text-tangerine' },
+  prova:   { label: '🎯 PROVA', cls: 'bg-red-50 text-coral font-bold' },
 }
 
 const STATUS_LABELS = {
-  pendente: 'bg-slate-700 text-slate-400',
-  em_andamento: 'bg-amber-900 text-amber-300',
-  concluido: 'bg-emerald-900 text-emerald-300',
+  pendente:     'bg-gray-100 text-text-muted',
+  em_andamento: 'bg-amber-50 text-tangerine',
+  concluido:    'bg-green-50 text-sage',
+}
+
+function Badge({ children, cls }) {
+  return <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${cls}`}>{children}</span>
+}
+
+function Card({ children, accent, className = '' }) {
+  return (
+    <div
+      className={`bg-white rounded-card shadow-card border-l-4 ${accent ?? 'border-l-surface-border'} ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function SectionLabel({ children }) {
+  return (
+    <p className="text-xs font-semibold text-text-muted uppercase tracking-widest mb-3">{children}</p>
+  )
 }
 
 function QuestionCard({ q, onAttempt }) {
@@ -46,31 +66,39 @@ function QuestionCard({ q, onAttempt }) {
   const correct = q.gabarito
   const acertou = revealed && selected === correct
 
+  const cardBorder = revealed
+    ? acertou ? 'border-l-sage' : 'border-l-coral'
+    : 'border-l-surface-border'
+
   return (
-    <div className={`rounded-lg border p-4 space-y-3 ${revealed ? (acertou ? 'border-emerald-700/50' : 'border-rose-700/50') : 'border-slate-800'}`}>
+    <div className={`bg-white rounded-card shadow-card border-l-4 ${cardBorder} p-4 space-y-3`}>
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm text-slate-200 leading-relaxed flex-1">{q.enunciado}</p>
-        <span className="text-xs text-slate-500 shrink-0">{q.dificuldade}</span>
+        <p className="text-sm text-text-main leading-relaxed flex-1">{q.enunciado}</p>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+          q.dificuldade === 'facil' ? 'bg-green-50 text-sage' :
+          q.dificuldade === 'dificil' ? 'bg-red-50 text-coral' :
+          'bg-amber-50 text-tangerine'
+        }`}>{q.dificuldade}</span>
       </div>
 
       <div className="space-y-1.5">
         {Object.entries(q.alternativas).map(([key, text]) => {
-          let cls = 'border-slate-700 text-slate-300 hover:bg-slate-800 cursor-pointer'
+          let cls = 'border-surface-border text-text-main hover:bg-surface-bg hover:border-brand/30 cursor-pointer'
           if (revealed) {
-            if (key === correct) cls = 'border-emerald-600 bg-emerald-900/30 text-emerald-200'
-            else if (key === selected) cls = 'border-rose-600 bg-rose-900/30 text-rose-300'
-            else cls = 'border-slate-800 text-slate-500 cursor-default'
+            if (key === correct) cls = 'border-sage bg-green-50 text-sage'
+            else if (key === selected) cls = 'border-coral bg-red-50 text-coral'
+            else cls = 'border-surface-border text-text-faint cursor-default'
           } else if (selected === key) {
-            cls = 'border-indigo-500 bg-indigo-900/20 text-indigo-200'
+            cls = 'border-brand bg-brand-light text-brand'
           }
           return (
             <button
               key={key}
               onClick={() => handleAnswer(key)}
               disabled={revealed || loading}
-              className={`w-full text-left px-3 py-2 rounded border text-sm transition-colors ${cls}`}
+              className={`w-full text-left px-3 py-2 rounded-xl border text-sm transition-all ${cls}`}
             >
-              <span className="font-mono font-semibold mr-2">{key}.</span>
+              <span className="font-mono font-bold mr-2">{key}.</span>
               {text}
             </button>
           )
@@ -81,13 +109,13 @@ function QuestionCard({ q, onAttempt }) {
         <div>
           <button
             onClick={() => setShowComment(!showComment)}
-            className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1"
+            className={`text-xs flex items-center gap-1 font-medium ${acertou ? 'text-sage' : 'text-coral'}`}
           >
             {showComment ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             {acertou ? '✓ Correto' : `✗ Gabarito: ${correct}`} — ver comentário
           </button>
           {showComment && (
-            <p className="mt-2 text-xs text-slate-400 leading-relaxed bg-slate-800/50 rounded p-3">
+            <p className="mt-2 text-xs text-text-muted leading-relaxed bg-surface-bg rounded-xl p-3 border border-surface-border">
               {q.comentario}
             </p>
           )}
@@ -133,47 +161,36 @@ export default function Today() {
         setMaterial(matRes.value.data)
         setQuestions(matRes.value.data.questions || [])
       }
-    } catch (e) {
+    } catch {
       setError('Erro ao carregar dia de estudo')
     }
   }, [])
 
-  useEffect(() => {
-    loadDay(dateParam)
-  }, [dateParam, loadDay])
+  useEffect(() => { loadDay(dateParam) }, [dateParam, loadDay])
 
   function navigate(dateStr) {
-    if (dateStr) {
-      setSearchParams({ data: dateStr })
-    } else {
-      setSearchParams({})
-    }
+    if (dateStr) setSearchParams({ data: dateStr })
+    else setSearchParams({})
   }
 
   function goPrev() {
     if (!day) return
-    const prev = subDays(parseISO(day.data), 1)
-    navigate(format(prev, 'yyyy-MM-dd'))
+    navigate(format(subDays(parseISO(day.data), 1), 'yyyy-MM-dd'))
   }
 
   function goNext() {
     if (!day) return
     const next = addDays(parseISO(day.data), 1)
     const today = format(new Date(), 'yyyy-MM-dd')
-    if (format(next, 'yyyy-MM-dd') === today) {
-      navigate(null)
-    } else {
-      navigate(format(next, 'yyyy-MM-dd'))
-    }
+    if (format(next, 'yyyy-MM-dd') === today) navigate(null)
+    else navigate(format(next, 'yyyy-MM-dd'))
   }
 
   async function handleToggle(topicId) {
     const res = await api.toggleTopic(topicId)
     setDay(prev => ({
       ...prev,
-      topics: prev.topics.map(t =>
-        t.id === topicId ? { ...t, concluido: res.data.concluido } : t
-      ),
+      topics: prev.topics.map(t => t.id === topicId ? { ...t, concluido: res.data.concluido } : t),
     }))
     const updated = await api.getDay(day.id)
     setDay(updated.data)
@@ -183,9 +200,7 @@ export default function Today() {
     const val = e.target.value
     setNotes(val)
     clearTimeout(notesTimer.current)
-    notesTimer.current = setTimeout(() => {
-      api.updateDayNotes(day.id, val)
-    }, 800)
+    notesTimer.current = setTimeout(() => api.updateDayNotes(day.id, val), 800)
   }
 
   async function handleGenerate() {
@@ -193,7 +208,6 @@ export default function Today() {
     setError(null)
     setMaterial(null)
     setQuestions([])
-
     try {
       const res = await api.generateMaterial(day.id, model)
       setMaterial(res.data)
@@ -205,66 +219,58 @@ export default function Today() {
     }
   }
 
-  if (error && !day) {
-    return <div className="text-rose-400 text-sm">{error}</div>
-  }
-
-  if (!day) {
-    return <div className="text-slate-500 text-sm animate-pulse">Carregando...</div>
-  }
+  if (error && !day) return <p className="text-coral text-sm">{error}</p>
+  if (!day) return <p className="text-text-faint text-sm animate-pulse">Carregando...</p>
 
   const dateLabel = format(parseISO(day.data), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })
   const typeInfo = TYPE_LABELS[day.tipo] || TYPE_LABELS.util
   const isToday = !dateParam || dateParam === format(new Date(), 'yyyy-MM-dd')
 
+  const correctCount = questions.filter(q => q.attempt?.acertou).length
+  const wrongCount = questions.filter(q => q.attempt && !q.attempt.acertou).length
+  const pendingCount = questions.filter(q => !q.attempt).length
+
   return (
-    <div className="space-y-6">
-      {/* Header with navigation */}
-      <div className="space-y-1">
-        {day.phase && (
-          <p className="text-xs text-slate-500 uppercase tracking-wider">
-            Fase {day.phase.numero} · {day.phase.nome}
-          </p>
-        )}
-        {week?.week && (
-          <p className="text-xs text-slate-500">
-            Semana {week.week.numero} · {week.week.tema}
-          </p>
-        )}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={goPrev}
-              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-              title="Dia anterior"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <button
-              onClick={goNext}
-              className="p-1 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
-              title="Próximo dia"
-            >
-              <ChevronRight size={18} />
-            </button>
+    <div className="space-y-5">
+
+      {/* Date header */}
+      <div className="space-y-2">
+        {(day.phase || week?.week) && (
+          <div className="flex items-center gap-2">
+            {day.phase && (
+              <span className="text-xs font-semibold text-text-faint uppercase tracking-widest">
+                Fase {day.phase.numero} · {day.phase.nome}
+              </span>
+            )}
+            {week?.week && (
+              <>
+                <span className="text-text-faint text-xs">·</span>
+                <span className="text-xs text-text-faint">
+                  Sem {week.week.numero} · {week.week.tema}
+                </span>
+              </>
+            )}
           </div>
-          <h1 className="text-xl font-semibold text-slate-100 capitalize flex-1">{dateLabel}</h1>
+        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={goPrev} className="p-1 rounded-lg hover:bg-surface-bg text-text-muted hover:text-text-main transition-colors">
+            <ChevronLeft size={18} />
+          </button>
+          <button onClick={goNext} className="p-1 rounded-lg hover:bg-surface-bg text-text-muted hover:text-text-main transition-colors">
+            <ChevronRight size={18} />
+          </button>
+          <h1 className="text-xl font-bold text-text-main capitalize flex-1">{dateLabel}</h1>
           {!isToday && (
-            <button
-              onClick={() => navigate(null)}
-              className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
+            <button onClick={() => navigate(null)} className="text-xs text-brand hover:text-brand-dark font-medium transition-colors">
               Ir para hoje
             </button>
           )}
-          <span className={`text-xs px-2 py-0.5 rounded-full ${typeInfo.cls}`}>{typeInfo.label}</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LABELS[day.status]}`}>
-            {day.status}
-          </span>
+          <Badge cls={typeInfo.cls}>{typeInfo.label}</Badge>
+          <Badge cls={STATUS_LABELS[day.status]}>{day.status}</Badge>
         </div>
       </div>
 
-      {/* Week mini-calendar — clickable */}
+      {/* Week mini-calendar */}
       {week?.days && (
         <div className="flex gap-1.5">
           {week.days.map(d => (
@@ -275,14 +281,14 @@ export default function Today() {
                 if (d.data === today) navigate(null)
                 else navigate(d.data)
               }}
-              className={`flex-1 rounded py-1 text-center text-xs transition-colors ${
+              className={`flex-1 rounded-xl py-1.5 text-center text-xs font-medium transition-all ${
                 d.data === day.data
-                  ? 'bg-indigo-600 text-white font-bold'
+                  ? 'bg-brand text-white shadow-sm'
                   : d.status === 'concluido'
-                  ? 'bg-emerald-900/50 text-emerald-400 hover:bg-emerald-900'
+                  ? 'bg-green-50 text-sage hover:bg-green-100'
                   : d.status === 'em_andamento'
-                  ? 'bg-amber-900/50 text-amber-400 hover:bg-amber-900'
-                  : 'bg-slate-800 text-slate-500 hover:bg-slate-700'
+                  ? 'bg-amber-50 text-tangerine hover:bg-amber-100'
+                  : 'bg-white text-text-faint hover:bg-surface-bg border border-surface-border'
               }`}
             >
               {format(parseISO(d.data), 'EEE', { locale: ptBR }).slice(0, 3)}
@@ -292,48 +298,52 @@ export default function Today() {
       )}
 
       {/* Topics */}
-      <div className="bg-slate-900 rounded-xl border border-slate-800 p-4 space-y-3">
-        <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Tópicos do dia</h2>
-        {day.topics.map(topic => (
-          <button
-            key={topic.id}
-            onClick={() => handleToggle(topic.id)}
-            className="w-full flex items-start gap-3 text-left group"
-          >
-            {topic.concluido ? (
-              <CheckSquare size={18} className="text-emerald-400 shrink-0 mt-0.5" />
-            ) : (
-              <Square size={18} className="text-slate-600 group-hover:text-slate-400 shrink-0 mt-0.5" />
-            )}
-            <span className={`text-sm leading-relaxed ${topic.concluido ? 'line-through text-slate-500' : 'text-slate-200'}`}>
-              {topic.descricao}
-            </span>
-          </button>
-        ))}
-      </div>
+      <Card accent="border-l-brand" className="p-5">
+        <SectionLabel>Tópicos do dia</SectionLabel>
+        <div className="space-y-2.5">
+          {day.topics.map(topic => (
+            <button
+              key={topic.id}
+              onClick={() => handleToggle(topic.id)}
+              className="w-full flex items-start gap-3 text-left group"
+            >
+              {topic.concluido ? (
+                <CheckSquare size={17} className="text-sage shrink-0 mt-0.5" />
+              ) : (
+                <Square size={17} className="text-text-faint group-hover:text-brand shrink-0 mt-0.5 transition-colors" />
+              )}
+              <span className={`text-sm leading-relaxed transition-colors ${
+                topic.concluido ? 'line-through text-text-faint' : 'text-text-main group-hover:text-brand'
+              }`}>
+                {topic.descricao}
+              </span>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       {/* Notes */}
       <div>
-        <label className="block text-xs text-slate-500 mb-1.5 uppercase tracking-wider">Anotações do dia</label>
+        <label className="block text-xs text-text-muted mb-1.5 font-semibold uppercase tracking-widest">Anotações do dia</label>
         <textarea
           value={notes}
           onChange={handleNotesChange}
           placeholder="Dificuldades, dúvidas, observações..."
           rows={3}
-          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-600 resize-none"
+          className="w-full bg-white border border-surface-border rounded-card px-4 py-3 text-sm text-text-main placeholder-text-faint focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 resize-none shadow-card transition-all"
         />
       </div>
 
       {/* Generate Material */}
-      <div className="border-t border-slate-800 pt-6 space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center gap-3 flex-wrap">
-          <h2 className="text-sm font-semibold text-slate-300 flex-1">Material de Estudo</h2>
+          <h2 className="text-base font-bold text-text-main flex-1">Material de Estudo</h2>
           <div className="flex items-center gap-2">
             <select
               value={model}
               onChange={e => setModel(e.target.value)}
               disabled={generating}
-              className="bg-slate-800 border border-slate-700 rounded-md text-xs text-slate-300 px-2 py-1.5 focus:outline-none focus:border-indigo-600"
+              className="bg-white border border-surface-border rounded-xl text-xs text-text-main px-3 py-2 focus:outline-none focus:border-brand shadow-sm"
             >
               <option value="claude-sonnet-4-6">Sonnet 4.6</option>
               <option value="claude-opus-4-7">Opus 4.7 (melhor)</option>
@@ -341,57 +351,69 @@ export default function Today() {
             <button
               onClick={handleGenerate}
               disabled={generating}
-              className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold transition-colors shadow-sm"
             >
-              {generating ? (
-                <RefreshCw size={14} className="animate-spin" />
-              ) : (
-                <Sparkles size={14} />
-              )}
+              {generating ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
               {material && !generating ? 'Regenerar' : 'Gerar Material'}
             </button>
           </div>
         </div>
 
-        {error && <p className="text-rose-400 text-sm">{error}</p>}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+            <p className="text-coral text-sm">{error}</p>
+          </div>
+        )}
 
         {generating && (
-          <div className="flex items-center gap-2 text-xs text-amber-500">
-            <RefreshCw size={11} className="animate-spin" />
-            Gerando material... isso pode levar até 1 minuto
-          </div>
+          <Card accent="border-l-tangerine" className="px-5 py-4">
+            <div className="flex items-center gap-3">
+              <RefreshCw size={16} className="animate-spin text-tangerine" />
+              <div>
+                <p className="text-sm font-medium text-text-main">Gerando material...</p>
+                <p className="text-xs text-text-muted">Isso pode levar até 1 minuto</p>
+              </div>
+            </div>
+          </Card>
         )}
 
         {material && !generating && (
           <>
             {material.custo_usd && (
-              <p className="text-xs text-slate-600">
-                {material.tokens_in?.toLocaleString()} tokens entrada ·{' '}
-                {material.tokens_out?.toLocaleString()} saída ·{' '}
-                ${material.custo_usd?.toFixed(4)} ·{' '}
-                cache {Math.round((material.cache_hit_ratio || 0) * 100)}%
+              <p className="text-xs text-text-faint">
+                {material.tokens_in?.toLocaleString()} entrada · {material.tokens_out?.toLocaleString()} saída ·{' '}
+                ${material.custo_usd?.toFixed(4)} · cache {Math.round((material.cache_hit_ratio || 0) * 100)}%
               </p>
             )}
 
-            <div className="bg-slate-900 rounded-xl border border-slate-800 p-5">
+            <Card accent="border-l-brand" className="p-6">
               <div className="prose-study">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{material.conteudo_md}</ReactMarkdown>
               </div>
-            </div>
+            </Card>
 
             {questions.length > 0 && (
               <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-medium text-slate-300">Questões FCC ({questions.length})</h3>
-                  <span className="text-xs text-slate-600">
-                    {questions.filter(q => q.attempt?.acertou).length} corretas ·{' '}
-                    {questions.filter(q => q.attempt && !q.attempt.acertou).length} erradas ·{' '}
-                    {questions.filter(q => !q.attempt).length} não respondidas
-                  </span>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-text-main">Questões FCC ({questions.length})</h3>
+                  <div className="flex items-center gap-3 text-xs font-medium">
+                    <span className="text-sage">{correctCount} corretas</span>
+                    <span className="text-coral">{wrongCount} erradas</span>
+                    <span className="text-text-faint">{pendingCount} pendentes</span>
+                  </div>
                 </div>
-                {questions.map(q => (
-                  <QuestionCard key={q.id} q={q} />
-                ))}
+
+                {/* Score bar */}
+                {questions.length > 0 && (correctCount + wrongCount) > 0 && (
+                  <div className="w-full bg-surface-bg rounded-full h-1.5 overflow-hidden">
+                    <div className="h-full flex">
+                      <div className="bg-sage transition-all" style={{ width: `${(correctCount / questions.length) * 100}%` }} />
+                      <div className="bg-coral transition-all" style={{ width: `${(wrongCount / questions.length) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                {questions.map(q => <QuestionCard key={q.id} q={q} />)}
               </div>
             )}
           </>
