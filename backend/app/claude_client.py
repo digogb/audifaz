@@ -129,6 +129,8 @@ Técnicas de memorização para estruturas complexas. Analogias com desenvolvime
 ## 4. Pegadinhas FCC
 As alternativas incorretas mais comuns que a banca usa. Confusões típicas de conceito (ex: COBIT vs ITIL, RPO vs RTO). Casos onde quem "sabe o assunto" erra por não conhecer a letra exata do framework. Inclua exemplos de alternativas falsas convincentes.
 
+**Seja objetivo: cada seção no máximo 600 palavras.** O conteúdo total das 4 seções não deve ultrapassar 2500 palavras — o que importa é densidade e precisão, não extensão.
+
 Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente 15 questões estilo FCC com:
 - Enunciado-cenário realista (contexto de Auditor Fiscal da SEFAZ)
 - 5 alternativas plausíveis (alternativas erradas devem ser tentadoras, não óbvias)
@@ -142,7 +144,7 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
 
     params: dict = {
         "model": model,
-        "max_tokens": 10000,
+        "max_tokens": 20000,
         "system": system_blocks,
         "tools": [_TOOL],
         "tool_choice": {"type": "auto"},
