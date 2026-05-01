@@ -8,7 +8,7 @@ from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio
-from ..auth import get_current_user
+from ..auth import get_current_user, get_admin_user
 
 router = APIRouter(prefix="/api/days", tags=["materials"])
 
@@ -82,7 +82,7 @@ async def generate_material(
     day_id: int,
     model: str = Query("claude-sonnet-4-6"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    _: User = Depends(get_admin_user),
 ):
     if model not in ("claude-sonnet-4-6", "claude-opus-4-7"):
         raise HTTPException(400, "Modelo inválido")

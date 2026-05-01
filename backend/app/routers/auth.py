@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
 from ..models import User
 from ..schemas import LoginRequest, TokenOut
-from ..auth import hash_password, verify_password, create_token, get_current_user
+from ..auth import hash_password, verify_password, create_token, get_current_user, get_admin_user, is_admin
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -19,7 +19,11 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/register", response_model=TokenOut)
-async def register(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    body: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_admin_user),
+):
     result = await db.execute(select(User).where(User.username == body.username))
     if result.scalar_one_or_none():
         raise HTTPException(400, "Usuário já existe")
@@ -32,4 +36,8 @@ async def register(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.get("/me")
 async def me(current_user: User = Depends(get_current_user)):
-    return {"id": current_user.id, "username": current_user.username}
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "is_admin": is_admin(current_user),
+    }

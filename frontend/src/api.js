@@ -23,6 +23,7 @@ api.interceptors.response.use(
 // Auth
 export const authLogin = (username, password) => api.post('/auth/login', { username, password })
 export const authRegister = (username, password) => api.post('/auth/register', { username, password })
+export const authMe = () => api.get('/auth/me')
 
 // Days
 export const getToday = () => api.get('/days/today')

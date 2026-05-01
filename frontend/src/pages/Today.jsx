@@ -9,6 +9,7 @@ import {
   RefreshCw, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import * as api from '../api'
+import { useAuth } from '../contexts/AuthContext'
 
 const glass = {
   background: 'rgba(255,255,255,0.05)',
@@ -149,6 +150,7 @@ function QuestionCard({ q }) {
 }
 
 export default function Today() {
+  const { isAdmin } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [day, setDay] = useState(null)
   const [week, setWeek] = useState(null)
@@ -373,27 +375,33 @@ export default function Today() {
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-lg font-bold text-white tracking-tight">Material de Estudo</h2>
-          <div className="flex items-center gap-2">
-            <select
-              value={model}
-              onChange={e => setModel(e.target.value)}
-              disabled={generating}
-              className="rounded-btn text-[12px] text-white/80 px-3 py-2 focus:outline-none focus:border-accent-blue"
-              style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
-            >
-              <option value="claude-sonnet-4-6" className="bg-bg-base">Sonnet 4.6</option>
-              <option value="claude-opus-4-7" className="bg-bg-base">Opus 4.7</option>
-            </select>
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="flex items-center gap-2 px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors"
-            >
-              {generating ? <RefreshCw size={13} strokeWidth={2} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
-              {material && !generating ? 'Regenerar' : 'Gerar'}
-            </button>
-          </div>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <select
+                value={model}
+                onChange={e => setModel(e.target.value)}
+                disabled={generating}
+                className="rounded-btn text-[12px] text-white/80 px-3 py-2 focus:outline-none focus:border-accent-blue"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+              >
+                <option value="claude-sonnet-4-6" className="bg-bg-base">Sonnet 4.6</option>
+                <option value="claude-opus-4-7" className="bg-bg-base">Opus 4.7</option>
+              </select>
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="flex items-center gap-2 px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors"
+              >
+                {generating ? <RefreshCw size={13} strokeWidth={2} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
+                {material && !generating ? 'Regenerar' : 'Gerar'}
+              </button>
+            </div>
+          )}
         </div>
+
+        {!isAdmin && !material && !generating && (
+          <p className="text-[13px] text-white/50">Material ainda não disponível para este dia.</p>
+        )}
 
         {error && (
           <div className="rounded-btn px-4 py-3" style={{ background: 'rgba(212,132,90,0.10)', border: '0.5px solid rgba(212,132,90,0.35)' }}>
