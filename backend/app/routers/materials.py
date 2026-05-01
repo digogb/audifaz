@@ -126,8 +126,9 @@ async def generate_material(
         cache_hit_ratio=_calc_cache_ratio(usage_dict),
     )
     db.add(material)
-    await db.flush()
+    await db.flush()  # assigns material.id
 
+    gq_objects = []
     for i, q in enumerate(questions_data):
         gq = GeneratedQuestion(
             study_material_id=material.id,
@@ -140,27 +141,12 @@ async def generate_material(
             ordem=i,
         )
         db.add(gq)
+        gq_objects.append(gq)
 
-    await db.commit()
+    await db.flush()  # assigns ids to all questions before commit expires them
 
-    # Return full material with empty attempts for current user
-    questions_out = []
-    for gq in sorted(
-        await _reload_questions(db, material.id), key=lambda x: x.ordem
-    ):
-        questions_out.append({
-            "id": gq.id,
-            "enunciado": gq.enunciado,
-            "alternativas": gq.alternativas,
-            "gabarito": gq.gabarito,
-            "comentario": gq.comentario,
-            "disciplina": gq.disciplina,
-            "dificuldade": gq.dificuldade,
-            "ordem": gq.ordem,
-            "attempt": None,
-        })
-
-    return {
+    # Capture all data while session is still live
+    material_snapshot = {
         "id": material.id,
         "gerado_em": material.gerado_em,
         "modelo": material.modelo,
@@ -169,15 +155,24 @@ async def generate_material(
         "tokens_out": material.tokens_out,
         "custo_usd": material.custo_usd,
         "cache_hit_ratio": material.cache_hit_ratio,
-        "questions": questions_out,
+        "questions": [
+            {
+                "id": gq.id,
+                "enunciado": gq.enunciado,
+                "alternativas": gq.alternativas,
+                "gabarito": gq.gabarito,
+                "comentario": gq.comentario,
+                "disciplina": gq.disciplina,
+                "dificuldade": gq.dificuldade,
+                "ordem": gq.ordem,
+                "attempt": None,
+            }
+            for gq in gq_objects
+        ],
     }
 
-
-async def _reload_questions(db: AsyncSession, material_id: int) -> list:
-    result = await db.execute(
-        select(GeneratedQuestion).where(GeneratedQuestion.study_material_id == material_id)
-    )
-    return result.scalars().all()
+    await db.commit()
+    return material_snapshot
 
 
 async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
