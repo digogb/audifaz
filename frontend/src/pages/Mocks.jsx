@@ -62,8 +62,8 @@ function MockForm({ onClose, onSave }) {
   )
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="rounded-hero w-full max-w-lg my-4 p-6 space-y-4" style={{ background: '#1A2D50', border: '0.5px solid rgba(255,255,255,0.15)' }}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="rounded-hero w-full max-w-lg my-4 p-5 sm:p-6 space-y-4" style={{ background: '#1A2D50', border: '0.5px solid rgba(255,255,255,0.15)' }}>
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-white text-base">Registrar Simulado</h2>
           <button onClick={onClose} className="text-white/50 hover:text-white p-1 rounded-btn hover:bg-white/5 transition-colors">
@@ -151,7 +151,7 @@ function MockCard({ mock, onDelete }) {
   const pctColor = pct >= 70 ? '#5B9EF4' : pct >= 50 ? '#A8B5CC' : '#D4845A'
 
   return (
-    <div className="rounded-container p-5 space-y-4" style={glass}>
+    <div className="rounded-container p-4 sm:p-5 space-y-4" style={glass}>
       <div className="flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2 flex-wrap mb-1">
@@ -177,12 +177,12 @@ function MockCard({ mock, onDelete }) {
             const p = r.total > 0 ? Math.round(r.acertos / r.total * 100) : 0
             const barColor = p >= 70 ? '#5B9EF4' : p >= 50 ? '#A8B5CC' : '#D4845A'
             return (
-              <div key={r.id} className="flex items-center gap-3 pt-1">
-                <span className="text-[12px] text-white/65 w-40 truncate">{r.disciplina}</span>
+              <div key={r.id} className="flex items-center gap-2 sm:gap-3 pt-1">
+                <span className="text-[11px] sm:text-[12px] text-white/65 w-24 sm:w-40 truncate">{r.disciplina}</span>
                 <div className="flex-1 rounded-full h-1.5" style={{ background: 'rgba(255,255,255,0.05)' }}>
                   <div className="h-1.5 rounded-full transition-all" style={{ width: `${p}%`, backgroundColor: barColor }} />
                 </div>
-                <span className="text-[11px] text-white/45 w-20 text-right font-mono">{r.acertos}/{r.total} ({p}%)</span>
+                <span className="text-[10px] sm:text-[11px] text-white/45 w-16 sm:w-20 text-right font-mono shrink-0">{r.acertos}/{r.total} ({p}%)</span>
               </div>
             )
           })}
@@ -211,12 +211,12 @@ export default function Mocks() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold text-white tracking-tight">Simulados</h1>
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Simulados</h1>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-accent-blue hover:bg-accent-blue/90 rounded-btn text-white text-[13px] font-semibold transition-colors"
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-accent-blue hover:bg-accent-blue/90 rounded-btn text-white text-[13px] font-semibold transition-colors"
         >
           <Plus size={13} strokeWidth={2} /> Registrar
         </button>

@@ -80,9 +80,9 @@ function QuestionCard({ q }) {
   const acertou = revealed && selected === correct
 
   return (
-    <GlassCard className="p-5 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-[14px] text-white/85 leading-relaxed flex-1">{q.enunciado}</p>
+    <GlassCard className="p-4 sm:p-5 space-y-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <p className="text-[13px] sm:text-[14px] text-white/85 leading-relaxed flex-1">{q.enunciado}</p>
         <Pill cls={
           q.dificuldade === 'facil' ? 'text-text-blue' :
           q.dificuldade === 'dificil' ? 'text-accent-orange' :
@@ -244,29 +244,29 @@ export default function Today() {
   const pendingCount = questions.filter(q => !q.attempt).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
 
       {/* Hero header */}
       <div className="space-y-3">
         {(day.phase || week?.week) && (
-          <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest">
+          <div className="flex items-center gap-2 text-[10px] sm:text-[11px] uppercase tracking-widest flex-wrap">
             {day.phase && <span className="text-text-blue font-semibold">FASE {day.phase.numero}</span>}
             {day.phase && <span className="text-white/30">·</span>}
-            {day.phase && <span className="text-white/55">{day.phase.nome}</span>}
+            {day.phase && <span className="text-white/55 truncate max-w-[60vw]">{day.phase.nome}</span>}
             {week?.week && <span className="text-white/30">·</span>}
             {week?.week && <span className="text-white/55">SEM {week.week.numero}</span>}
           </div>
         )}
 
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white capitalize leading-none">
+        <div className="flex items-end justify-between gap-3 flex-wrap">
+          <div className="space-y-1 min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-white capitalize leading-tight">
               {dateLabel}
             </h1>
             <p className="text-[12px] text-white/40 font-mono">{yearLabel}</p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={goPrev}
               className="p-2 rounded-btn text-white/60 hover:text-white hover:bg-white/5 transition-all"
@@ -277,7 +277,7 @@ export default function Today() {
             {!isToday && (
               <button
                 onClick={() => navigate(null)}
-                className="text-[12px] px-3 py-2 rounded-btn text-text-blue hover:bg-text-blue/10 transition-all font-medium"
+                className="text-[12px] px-2.5 sm:px-3 py-2 rounded-btn text-text-blue hover:bg-text-blue/10 transition-all font-medium"
                 style={{ border: '0.5px solid rgba(91,158,244,0.30)' }}
               >
                 Hoje
@@ -301,7 +301,7 @@ export default function Today() {
 
       {/* Week mini-calendar */}
       {week?.days && (
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-7 gap-1 sm:gap-2">
           {week.days.map(d => {
             const isCurrent = d.data === day.data
             const dayN = format(parseISO(d.data), 'd')
@@ -314,13 +314,13 @@ export default function Today() {
                   if (d.data === today) navigate(null)
                   else navigate(d.data)
                 }}
-                className={`flex flex-col items-center justify-center py-3 rounded-card transition-all ${
+                className={`flex flex-col items-center justify-center py-2 sm:py-3 rounded-card transition-all ${
                   isCurrent ? 'bg-accent-blue text-white' : 'text-white/60 hover:text-white hover:bg-white/5'
                 }`}
                 style={!isCurrent ? { background: 'rgba(255,255,255,0.03)', border: '0.5px solid rgba(255,255,255,0.08)' } : {}}
               >
-                <span className="text-[10px] uppercase font-medium opacity-70">{dayLabel}</span>
-                <span className="text-base font-bold mt-0.5">{dayN}</span>
+                <span className="text-[9px] sm:text-[10px] uppercase font-medium opacity-70">{dayLabel}</span>
+                <span className="text-sm sm:text-base font-bold mt-0.5">{dayN}</span>
                 {!isCurrent && d.status === 'concluido' && (
                   <span className="w-1 h-1 rounded-full bg-text-blue mt-1" />
                 )}
@@ -335,7 +335,7 @@ export default function Today() {
 
       {/* Topics + Notes */}
       <div className="grid md:grid-cols-3 gap-4">
-        <GlassCard className="p-5 md:col-span-2">
+        <GlassCard className="p-4 sm:p-5 md:col-span-2">
           <SectionLabel>Tópicos do dia</SectionLabel>
           <div className="space-y-3">
             {day.topics.map(topic => (
@@ -359,13 +359,13 @@ export default function Today() {
           </div>
         </GlassCard>
 
-        <GlassCard className="p-5">
+        <GlassCard className="p-4 sm:p-5">
           <SectionLabel>Anotações</SectionLabel>
           <textarea
             value={notes}
             onChange={handleNotesChange}
             placeholder="Dúvidas, dificuldades..."
-            rows={5}
+            rows={4}
             className="w-full bg-transparent text-[13px] text-white/85 placeholder-white/30 focus:outline-none resize-none"
           />
         </GlassCard>
@@ -374,14 +374,14 @@ export default function Today() {
       {/* Generate Material */}
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-bold text-white tracking-tight">Material de Estudo</h2>
+          <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Material de Estudo</h2>
           {isAdmin && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <select
                 value={model}
                 onChange={e => setModel(e.target.value)}
                 disabled={generating}
-                className="rounded-btn text-[12px] text-white/80 px-3 py-2 focus:outline-none focus:border-accent-blue"
+                className="flex-1 sm:flex-none rounded-btn text-[12px] text-white/80 px-3 py-2 focus:outline-none focus:border-accent-blue"
                 style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
               >
                 <option value="claude-sonnet-4-6" className="bg-bg-base">Sonnet 4.6</option>
@@ -424,7 +424,7 @@ export default function Today() {
         {material && !generating && (
           <>
             {material.custo_usd && (
-              <div className="flex items-center gap-4 text-[11px] text-white/40 font-mono">
+              <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-white/40 font-mono flex-wrap">
                 <span>{material.tokens_in?.toLocaleString()} in</span>
                 <span>{material.tokens_out?.toLocaleString()} out</span>
                 <span>${material.custo_usd?.toFixed(4)}</span>
@@ -432,7 +432,7 @@ export default function Today() {
               </div>
             )}
 
-            <GlassCard className="p-7">
+            <GlassCard className="p-4 sm:p-6 md:p-7">
               <div className="prose-study">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{material.conteudo_md}</ReactMarkdown>
               </div>

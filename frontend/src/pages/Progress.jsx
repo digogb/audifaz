@@ -95,11 +95,11 @@ export default function Progress() {
   const COLORS = ['#5B9EF4', '#D4845A', '#A8B5CC', '#2D72D9', '#E8865A', '#7BB0F7', '#C9956F']
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-extrabold text-white tracking-tight">Progresso</h1>
+    <div className="space-y-5 sm:space-y-6">
+      <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Progresso</h1>
 
       {/* Stat cards row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
         <StatCard icon={Target} value={`${totalPct}%`} label="Geral" />
         <StatCard icon={CalendarCheck} value={doneDays} label="Concluídos" />
         <StatCard icon={BookOpen} value={inProgressDays} label="Em andamento" accent="#D4845A" />
@@ -107,7 +107,7 @@ export default function Progress() {
       </div>
 
       {/* Overall bar */}
-      <GlassCard className="p-5">
+      <GlassCard className="p-4 sm:p-5">
         <SectionLabel>Progresso geral</SectionLabel>
         <div className="flex items-end justify-between mb-3">
           <p className="text-white/55 text-[13px]">{doneDays} de {totalDays} dias concluídos</p>
@@ -122,13 +122,13 @@ export default function Progress() {
       </GlassCard>
 
       {/* Heatmap */}
-      <GlassCard className="p-5">
+      <GlassCard className="p-4 sm:p-5">
         <SectionLabel>Calendário de estudo</SectionLabel>
         <Heatmap days={data.days} />
       </GlassCard>
 
       {/* Phase progress */}
-      <GlassCard className="p-5">
+      <GlassCard className="p-4 sm:p-5">
         <SectionLabel>Por fase</SectionLabel>
         <div className="space-y-5">
           {data.phases.map(p => (
@@ -153,7 +153,7 @@ export default function Progress() {
 
       {/* Mock chart */}
       {data.mocks.length > 0 ? (
-        <GlassCard className="p-5">
+        <GlassCard className="p-4 sm:p-5">
           <SectionLabel>Evolução em simulados</SectionLabel>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">

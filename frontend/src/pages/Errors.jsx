@@ -121,8 +121,8 @@ function ManualErrorModal({ onClose, onSave }) {
   )
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="rounded-hero w-full max-w-lg p-6 space-y-4" style={{ background: '#1A2D50', border: '0.5px solid rgba(255,255,255,0.15)' }}>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-start sm:items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="rounded-hero w-full max-w-lg my-4 p-5 sm:p-6 space-y-4" style={{ background: '#1A2D50', border: '0.5px solid rgba(255,255,255,0.15)' }}>
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-white text-base">Registrar Erro Manual</h2>
           <button onClick={onClose} className="text-white/50 hover:text-white p-1 rounded-btn hover:bg-white/5 transition-colors">
@@ -211,14 +211,14 @@ export default function Errors() {
   const selectCls = 'rounded-btn text-[12px] text-white/80 px-3 py-2 focus:outline-none focus:border-accent-blue'
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold text-white tracking-tight">Caderno de Erros</h1>
+    <div className="space-y-5 sm:space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Caderno de Erros</h1>
         <button
           onClick={() => setShowModal(true)}
-          className="flex items-center gap-1.5 px-4 py-2 bg-accent-blue hover:bg-accent-blue/90 rounded-btn text-white text-[13px] font-semibold transition-colors"
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-accent-blue hover:bg-accent-blue/90 rounded-btn text-white text-[13px] font-semibold transition-colors"
         >
-          <Plus size={13} strokeWidth={2} /> Erro Manual
+          <Plus size={13} strokeWidth={2} /> <span className="hidden sm:inline">Erro Manual</span><span className="sm:hidden">Novo</span>
         </button>
       </div>
 
@@ -234,22 +234,24 @@ export default function Errors() {
         </div>
       )}
 
-      <div className="flex gap-2 flex-wrap items-center">
-        <select value={filters.disciplina} onChange={e => setFilters(p => ({ ...p, disciplina: e.target.value }))} className={selectCls} style={inputStyle}>
+      <div className="grid grid-cols-1 sm:flex gap-2 sm:flex-wrap items-stretch sm:items-center">
+        <select value={filters.disciplina} onChange={e => setFilters(p => ({ ...p, disciplina: e.target.value }))} className={selectCls + ' w-full sm:w-auto'} style={inputStyle}>
           <option value="" className="bg-bg-base">Todas as disciplinas</option>
           {disciplines.map(d => <option key={d} value={d} className="bg-bg-base">{d}</option>)}
         </select>
-        <select value={filters.revisado} onChange={e => setFilters(p => ({ ...p, revisado: e.target.value }))} className={selectCls} style={inputStyle}>
-          <option value="" className="bg-bg-base">Todos</option>
-          <option value="nao" className="bg-bg-base">Não revisados</option>
-          <option value="sim" className="bg-bg-base">Revisados</option>
-        </select>
-        <select value={filters.dias} onChange={e => setFilters(p => ({ ...p, dias: e.target.value }))} className={selectCls} style={inputStyle}>
-          <option value="" className="bg-bg-base">Todo período</option>
-          <option value="7" className="bg-bg-base">Últimos 7 dias</option>
-          <option value="30" className="bg-bg-base">Últimos 30 dias</option>
-        </select>
-        <span className="text-[12px] text-white/45 font-mono">{errors.length} erros</span>
+        <div className="grid grid-cols-2 sm:flex gap-2">
+          <select value={filters.revisado} onChange={e => setFilters(p => ({ ...p, revisado: e.target.value }))} className={selectCls + ' w-full sm:w-auto'} style={inputStyle}>
+            <option value="" className="bg-bg-base">Todos</option>
+            <option value="nao" className="bg-bg-base">Não revisados</option>
+            <option value="sim" className="bg-bg-base">Revisados</option>
+          </select>
+          <select value={filters.dias} onChange={e => setFilters(p => ({ ...p, dias: e.target.value }))} className={selectCls + ' w-full sm:w-auto'} style={inputStyle}>
+            <option value="" className="bg-bg-base">Todo período</option>
+            <option value="7" className="bg-bg-base">Últimos 7 dias</option>
+            <option value="30" className="bg-bg-base">Últimos 30 dias</option>
+          </select>
+        </div>
+        <span className="text-[12px] text-white/45 font-mono sm:self-center">{errors.length} erros</span>
       </div>
 
       {loading ? (
