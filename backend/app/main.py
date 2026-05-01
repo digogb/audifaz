@@ -12,6 +12,7 @@ from sqlalchemy import select
 from .db import engine, AsyncSessionLocal
 from .models import Base, User, StudyDay, StudyMaterial
 from .seed import seed_if_needed
+from .migrate import migrate
 from .auth import hash_password
 from .routers import days, topics, materials, errors, mocks, progress
 from .routers import auth as auth_router
@@ -60,6 +61,8 @@ async def lifespan(app: FastAPI):
     async with AsyncSessionLocal() as db:
         await seed_if_needed(db)
     await _seed_admin()
+    async with AsyncSessionLocal() as db:
+        await migrate(db)
 
     # Start cron scheduler
     scheduler = AsyncIOScheduler(timezone=TZ)
