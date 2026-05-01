@@ -12,7 +12,7 @@ Transformar o AudiFaz de single-user em multi-usuário compartilhado:
 
 ---
 
-## Fase 1 — Autenticação [x]
+## Fase 1 — Autenticação [ ]
 
 **Backend:**
 - Adicionar dependências: `python-jose[cryptography]`, `passlib[bcrypt]`, `apscheduler`
@@ -34,7 +34,7 @@ Transformar o AudiFaz de single-user em multi-usuário compartilhado:
 
 ---
 
-## Fase 2 — Progresso Individual por Usuário [x]
+## Fase 2 — Progresso Individual por Usuário [ ]
 
 **Pré-requisito:** Fase 1 concluída.
 
@@ -53,7 +53,7 @@ Transformar o AudiFaz de single-user em multi-usuário compartilhado:
 
 ---
 
-## Fase 3 — Geração sem Streaming + Cron Diário [x]
+## Fase 3 — Geração sem Streaming + Cron Diário [ ]
 
 **Pré-requisito:** Fase 2 concluída.
 
@@ -79,7 +79,7 @@ Transformar o AudiFaz de single-user em multi-usuário compartilhado:
 
 ---
 
-## Fase 4 — Navegação entre Dias [x]
+## Fase 4 — Navegação entre Dias [ ]
 
 **Pré-requisito:** Fase 3 concluída.
 
