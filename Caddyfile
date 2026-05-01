@@ -1,0 +1,9 @@
+audifaz.rglabs.tech {
+    encode gzip
+    reverse_proxy app:8000 {
+        flush_interval -1
+        transport http {
+            response_header_timeout 5m
+        }
+    }
+}
