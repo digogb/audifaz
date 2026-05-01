@@ -14,9 +14,9 @@ export default {
         'surface-bg': '#F8F9FD',
         'surface-card': '#FFFFFF',
         'surface-border': '#E8E8F0',
-        'text-main': '#2C3E50',
-        'text-muted': '#7F8C8D',
-        'text-faint': '#BDC3C7',
+        'text-main': '#1A252F',
+        'text-muted': '#4A5568',
+        'text-faint': '#8896A5',
       },
       boxShadow: {
         card: '0px 4px 20px rgba(0, 0, 0, 0.06)',
