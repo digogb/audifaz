@@ -12,6 +12,17 @@
   .prose-study {
     @apply text-slate-200 leading-relaxed;
   }
+  .prose-study h1 {
+    @apply text-lg font-extrabold text-white mt-4 mb-5 pb-3;
+    border-bottom: 1px solid rgba(91,158,244,0.35);
+  }
+  .prose-study h1:first-child {
+    @apply mt-0;
+  }
+  .prose-study hr {
+    @apply my-8 border-0;
+    border-top: 1px dashed rgba(255,255,255,0.10);
+  }
   .prose-study h2 {
     @apply text-[11px] font-bold uppercase tracking-widest mt-8 mb-4 px-4 py-2.5 rounded-md;
     color: #5B9EF4;

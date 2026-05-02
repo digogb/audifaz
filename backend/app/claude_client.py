@@ -1,4 +1,6 @@
+import asyncio
 import json
+import math
 from pathlib import Path
 from anthropic import AsyncAnthropic
 
@@ -61,6 +63,28 @@ _FCC_METHODOLOGY = """**Como a FCC elabora questões de TI (inteligência de ban
    - Confunde OAuth 2.0 (autorização) com OIDC (autenticação)
    - Troca RPO (quanto dado pode perder) com RTO (quanto tempo pode ficar fora)
    - Alternativas que descrevem corretamente um padrão mas com nome errado"""
+
+_ACCURACY_CLAUSE = """**Princípios de precisão (CRÍTICO):**
+
+Quando você não tem certeza absoluta sobre:
+- Códigos exatos de processos (ex: APO12, BAI06, DSS04, MEA02)
+- Identificadores de controles ISO 27001:2022 (ex: A.5.7, A.8.23)
+- Versões de framework (COBIT 5 vs 2019, ITIL v3 vs v4, ISO 27001:2013 vs 2022, PMBOK 6 vs 7)
+- Quantidades exatas (ex: "93 controles", "47 práticas", "8 domínios", "12 princípios")
+- Nomes literais de domínios, práticas, objetivos
+
+**USE a ferramenta `web_search` para confirmar antes de afirmar.** Imprecisão é pior que omissão — o candidato perde questão por confiar em código errado tanto quanto por não saber. Se mesmo após buscar você fica em dúvida, escreva "[consultar fonte oficial]" em vez de inventar.
+
+**Fontes preferidas para busca:**
+- ISACA oficial (cobit) e Axelos/PeopleCert (itil) para frameworks
+- iso.org para normas (controles e cláusulas)
+- pmi.org para PMBOK 7
+- gov.br e sites de SEFAZ para legislação tributária e fiscal
+- nist.gov para SP 800-* e cybersecurity
+
+**Política de citação:** quando você usar um fato vindo de uma busca, cite brevemente "(fonte: <domínio>)" no comentário da questão ou ao final da seção. Não cite ao usar conhecimento geral consolidado.
+
+**Importante:** faça as buscas primeiro, depois produza o conteúdo final completo. Não intercale narração de busca com o conteúdo entregue ao usuário."""
 
 _TOOL = {
     "name": "registrar_questoes",
@@ -160,7 +184,9 @@ def _calc_cost(model: str, usage: dict) -> float:
     output_cost = usage.get("output_tokens", 0) * p["output"] / 1_000_000
     cache_write_cost = usage.get("cache_creation_input_tokens", 0) * p["cache_write"] / 1_000_000
     cache_read_cost = usage.get("cache_read_input_tokens", 0) * p["cache_read"] / 1_000_000
-    return round(input_cost + output_cost + cache_write_cost + cache_read_cost, 6)
+    # Web search server tool: $10 / 1k requests
+    web_search_cost = usage.get("web_search_requests", 0) * 0.01
+    return round(input_cost + output_cost + cache_write_cost + cache_read_cost + web_search_cost, 6)
 
 
 def _calc_cache_ratio(usage: dict) -> float:
@@ -174,11 +200,10 @@ def _calc_cache_ratio(usage: dict) -> float:
     return round(usage.get("cache_read_input_tokens", 0) / total_input, 3)
 
 
-def _build_params(topics: list[str], model: str) -> dict:
-    topics_text = "\n".join(f"- {t}" for t in topics)
-    user_message = f"""Gere o material de estudo para os tópicos do dia:
+def _build_params(topic: str, questions_count: int, model: str) -> dict:
+    user_message = f"""Gere o material de estudo focado **exclusivamente neste tópico**:
 
-{topics_text}
+**Tópico:** {topic}
 
 Estruture em exatamente 4 seções com esses cabeçalhos:
 
@@ -194,17 +219,19 @@ Técnicas de memorização para estruturas complexas. Analogias com desenvolvime
 ## 4. Pegadinhas FCC
 As alternativas incorretas mais comuns que a banca usa. Confusões típicas de conceito (ex: COBIT vs ITIL, RPO vs RTO). Casos onde quem "sabe o assunto" erra por não conhecer a letra exata do framework. Inclua exemplos de alternativas falsas convincentes.
 
-**Seja objetivo: cada seção no máximo 600 palavras.** O conteúdo total das 4 seções não deve ultrapassar 2500 palavras — o que importa é densidade e precisão, não extensão.
+**Densidade e precisão antes de extensão.** Cada seção no máximo 600 palavras; conteúdo total ≤ 2500 palavras. **Use `web_search` sempre que precisar confirmar códigos, versões, números ou nomes literais antes de afirmar.**
 
-Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente 15 questões estilo FCC com:
+Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente {questions_count} questões estilo FCC com:
 - Enunciado-cenário realista (contexto de Auditor Fiscal da SEFAZ)
-- 5 alternativas plausíveis (alternativas erradas devem ser tentadoras, não óbvias)
+- 5 alternativas plausíveis (erradas devem ser tentadoras, não óbvias)
 - Gabarito correto
-- Comentário explicando o raciocínio e por que cada alternativa errada está errada"""
+- Comentário explicando o raciocínio e por que cada alternativa errada está errada
+- O comentário deve ser AUTOCONSISTENTE com o gabarito declarado"""
 
     system_blocks = [
         {"type": "text", "text": _SYSTEM_PROFILE, "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": _FCC_METHODOLOGY, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": _ACCURACY_CLAUSE, "cache_control": {"type": "ephemeral"}},
     ]
 
     examples = _load_fcc_examples()
@@ -215,27 +242,29 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
             "cache_control": {"type": "ephemeral"},
         })
 
+    tools = [
+        _TOOL,
+        {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
+    ]
+
+    thinking_budget = 6000 if model == "claude-opus-4-7" else 4000
+
     params: dict = {
         "model": model,
-        "max_tokens": 20000,
+        "max_tokens": 16000,
         "system": system_blocks,
-        "tools": [_TOOL],
+        "tools": tools,
         "tool_choice": {"type": "auto"},
         "messages": [{"role": "user", "content": user_message}],
+        "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
     }
-
-    if model == "claude-opus-4-7":
-        params["thinking"] = {"type": "adaptive"}
-        params["output_config"] = {"effort": "high"}
-    else:
-        params["output_config"] = {"effort": "medium"}
 
     return params
 
 
-async def generate_material(topics: list[str], model: str = "claude-sonnet-4-6") -> tuple[str, list, dict]:
-    """Non-streaming generation. Returns (content_md, questions_data, usage_dict)."""
-    params = _build_params(topics, model)
+async def _generate_for_topic(topic: str, questions_count: int, model: str) -> tuple[str, list, dict]:
+    """Generate material for a single topic. Returns (content_md, questions, usage)."""
+    params = _build_params(topic, questions_count, model)
     response = await _client.messages.create(**params)
 
     content_md = ""
@@ -251,24 +280,65 @@ async def generate_material(topics: list[str], model: str = "claude-sonnet-4-6")
                 questions_data = []
 
     usage = response.usage
+    web_searches = 0
+    server_tool_use = getattr(usage, "server_tool_use", None)
+    if server_tool_use:
+        web_searches = getattr(server_tool_use, "web_search_requests", 0) or 0
+
     usage_dict = {
         "input_tokens": usage.input_tokens,
         "output_tokens": usage.output_tokens,
         "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
         "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "web_search_requests": web_searches,
     }
 
     return content_md, questions_data, usage_dict
 
 
+async def generate_material(topics: list[str], model: str = "claude-sonnet-4-6") -> tuple[str, list, dict]:
+    """Generate material per-topic in parallel. Aggregates content, questions and usage."""
+    if not topics:
+        return "", [], {"input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0, "web_search_requests": 0}
+
+    n = len(topics)
+    questions_per_topic = max(5, min(15, math.ceil(15 / n)))
+
+    results = await asyncio.gather(
+        *[_generate_for_topic(topic, questions_per_topic, model) for topic in topics]
+    )
+
+    full_md_parts: list[str] = []
+    all_questions: list[dict] = []
+    total_usage = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "web_search_requests": 0,
+    }
+
+    for topic, (md, questions, usage) in zip(topics, results):
+        if n > 1:
+            full_md_parts.append(f"# {topic}\n\n{md.strip()}")
+        else:
+            full_md_parts.append(md.strip())
+        all_questions.extend(questions)
+        for k in total_usage:
+            total_usage[k] += usage.get(k, 0)
+
+    full_md = "\n\n---\n\n".join(full_md_parts)
+    return full_md, all_questions, total_usage
+
+
 async def validate_material(content_md: str, questions_data: list) -> list[dict]:
     """Second-pass validation. Returns list of flags (empty = no issues found)."""
-    questions_json = json.dumps(questions_data[:5], ensure_ascii=False, indent=2)
+    questions_json = json.dumps(questions_data[:8], ensure_ascii=False, indent=2)
     user_msg = (
         "Analise o material abaixo. Chame `registrar_flags` com todas as inconsistências encontradas "
         "(ou com `flags: []` se não encontrar problemas).\n\n"
-        f"--- CONTEÚDO ---\n{content_md[:6000]}\n\n"
-        f"--- QUESTÕES (primeiras 5) ---\n{questions_json[:4000]}"
+        f"--- CONTEÚDO ---\n{content_md[:12000]}\n\n"
+        f"--- QUESTÕES (amostra) ---\n{questions_json[:6000]}"
     )
     try:
         response = await _client.messages.create(
@@ -287,47 +357,3 @@ async def validate_material(content_md: str, questions_data: list) -> list[dict]
     return []
 
 
-async def generate_material_stream(topics: list[str], model: str = "claude-sonnet-4-6"):
-    """Async generator yielding SSE-ready dicts for study material generation."""
-    params = _build_params(topics, model)
-
-    in_tool_use = False
-    tool_input_buffer = ""
-
-    async with _client.messages.stream(**params) as stream:
-        async for event in stream:
-            if event.type == "content_block_start":
-                if event.content_block.type == "tool_use":
-                    in_tool_use = True
-                    tool_input_buffer = ""
-
-            elif event.type == "content_block_delta":
-                if event.delta.type == "text_delta":
-                    yield {"type": "content", "chunk": event.delta.text}
-                elif event.delta.type == "input_json_delta" and in_tool_use:
-                    tool_input_buffer += event.delta.partial_json
-
-            elif event.type == "content_block_stop":
-                if in_tool_use and tool_input_buffer:
-                    try:
-                        questions = json.loads(tool_input_buffer).get("questoes", [])
-                        yield {"type": "questions", "data": questions}
-                    except (json.JSONDecodeError, AttributeError):
-                        yield {"type": "questions", "data": []}
-                    in_tool_use = False
-                    tool_input_buffer = ""
-
-        final = await stream.get_final_message()
-        usage = final.usage
-        usage_dict = {
-            "input_tokens": usage.input_tokens,
-            "output_tokens": usage.output_tokens,
-            "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
-            "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
-        }
-        yield {
-            "type": "done",
-            "usage": usage_dict,
-            "custo_usd": _calc_cost(model, usage_dict),
-            "cache_hit_ratio": _calc_cache_ratio(usage_dict),
-        }

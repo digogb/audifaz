@@ -1,7 +1,7 @@
 fastapi[all]>=0.115
 sqlalchemy[asyncio]>=2.0
 aiosqlite>=0.20
-anthropic>=0.50
+anthropic>=0.60
 python-multipart>=0.0.9
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.0
