@@ -29,7 +29,9 @@ def _fmt_examples_block(questoes: list[dict]) -> str:
         lines.append(q.get("enunciado", ""))
         for alt, txt in q.get("alternativas", {}).items():
             lines.append(f"{alt}) {txt}")
-        lines.append(f"Gabarito: {q.get('gabarito', '')}")
+        gab = q.get("gabarito", "").strip()
+        if gab:
+            lines.append(f"Gabarito: {gab}")
         lines.append("")
     return "\n".join(lines)
 

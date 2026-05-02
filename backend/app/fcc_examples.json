@@ -1,12 +1,104 @@
 {
-  "_instrucoes": "Adicione questões REAIS das provas de referência FCC. Cole o enunciado exato, alternativas, gabarito e ano/prova de origem. Quanto mais questões reais aqui, melhor a calibração do gerador.",
-  "_formato": {
-    "prova": "ex: SEFAZ-BA",
-    "ano": 2019,
-    "disciplina": "ex: Governança de TI",
-    "enunciado": "texto completo da questão",
-    "alternativas": {"A": "...", "B": "...", "C": "...", "D": "...", "E": "..."},
-    "gabarito": "A"
-  },
-  "questoes": []
+  "_instrucoes": "Questões reais extraídas das provas FCC de referência. Use para anchorar estilo e conteúdo do gerador. Para adicionar novas questões, copie o objeto e preencha. Gabarito vazio (string '') será ignorado pelo loader.",
+  "_fonte_pdf": "https://arquivos.qconcursos.com/prova/arquivo_prova/62222/fcc-2019-sefaz-ba-auditor-fiscal-tecnologia-da-informacao-prova-ii-prova.pdf",
+  "questoes": [
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Gerenciamento de Projetos (PMBOK 5)",
+      "enunciado": "Uma Auditora Fiscal da área de TI trabalha no processo Determinar Orçamento em um projeto com base nas melhores práticas do PMBOK 5ª edição. A figura ilustra os componentes do orçamento do projeto e a linha de base dos custos: Orçamento [I] → Linha de base dos custos → Contas de controle [II] → Estimativas de custos de pacotes de trabalho [III] → Estimativas dos custos das atividades. De acordo com a figura e considerando que o principal benefício deste processo é a determinação da linha de base dos custos para o monitoramento e controle do desempenho do projeto,",
+      "alternativas": {
+        "A": "as Contas de Controle são a versão aprovada do orçamento do projeto referenciado no tempo, excluindo quaisquer reservas de gerenciamento, que só podem ser mudadas por meio de procedimentos formais de controle de mudanças.",
+        "B": "a indicação II se refere à reserva dos pacotes de trabalho que, juntamente com as reservas gerenciais estimadas para os pacotes de trabalho, são agregadas à linha de base dos custos.",
+        "C": "a indicação III se refere à reserva das atividades que, juntamente com as reservas gerenciais estimadas para as atividades, são agregadas às Contas de Controle.",
+        "D": "a indicação II se refere às reservas de contingência, que são o orçamento dentro das Contas de Controle designado para riscos identificados que não são aceitos e para os quais respostas contingentes ou mitigadoras são desenvolvidas.",
+        "E": "a indicação I se refere à reserva gerencial, que pode ser usada para financiar um trabalho não previsto e, neste caso, seu valor é acrescentado à linha de base dos custos."
+      },
+      "gabarito": "D"
+    },
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Governança de TI (COBIT 5)",
+      "enunciado": "A cascata de objetivos do COBIT 5 traduz as necessidades das partes interessadas em objetivos de TI. Os objetivos de TI são estruturados de acordo com as dimensões do BSC de TI, alguns deles são listados a seguir: I. Otimização de ativos, recursos e capacidades de TI. II. Conhecimento, expertise e iniciativas para inovação dos negócios. III. Conformidade de TI e suporte para conformidade do negócio com as leis e regulamentos externos. IV. Gestão de risco organizacional de TI. V. Uso adequado de aplicativos, informações e soluções tecnológicas. Considerando os objetivos listados, referem-se à dimensão Financeira os que constam APENAS em",
+      "alternativas": {
+        "A": "III e IV.",
+        "B": "I e II.",
+        "C": "II e IV.",
+        "D": "I e V.",
+        "E": "III, IV e V."
+      },
+      "gabarito": "A"
+    },
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Gerenciamento de Serviços de TI (ITIL v3)",
+      "enunciado": "Solicitou-se a um Auditor Fiscal da área de TI o cálculo do Return Of Investment-ROI com a implantação da ITIL v3, edição 2011, com base nos valores médios para algumas métricas de Gerenciamento de Incidentes. Os valores atuais e as metas de redução são: I. Incidentes por mês: 5.000 — Meta de redução: 10%. II. Tempo médio da 1ª chamada: 12 minutos — Meta de redução: 1 minuto. Considerando que o custo médio de atendimento para cada incidente é de R$ 40,00, o Auditor afirma corretamente que a",
+      "alternativas": {
+        "A": "redução do tempo médio da 1ª chamada em 1 minuto terá impacto quase insignificante no ROI.",
+        "B": "redução do tempo médio da 1ª chamada em 1 minuto será o dobro do que se conseguirá com a redução de 10% no número de incidentes.",
+        "C": "economia com a redução de 10% nos incidentes será estimada em R$ 20.000,00.",
+        "D": "economia com a redução de 10% nos incidentes será estimada em 4.500 x R$ 40,00 = R$ 180.000,00.",
+        "E": "economia com a redução de 10% nos incidentes será estimada em 5.000 x R$ 36,00 = R$ 180.000,00."
+      },
+      "gabarito": "C"
+    },
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Engenharia de Software / Testes",
+      "enunciado": "Suponha que uma Auditora Fiscal da área de TI atue na etapa de testes e avaliação da qualidade de um software em desenvolvimento. Como o software sofria alterações a cada nova funcionalidade a ele incorporada, a Auditora propôs que a equipe de testes adotasse como padrão um tipo de teste que garantisse que as mudanças recentes no código deixassem o resto do código intacto, visando impedir a introdução de erros. A equipe decidiu realizar um tipo de teste para testar a parte modificada e as áreas adjacentes que podem ter sido afetadas, dentro de uma abordagem baseada em risco. Assim, os testadores destacariam as áreas de aplicação que poderiam ser afetadas pelas recentes alterações de código e selecionariam os casos de testes relevantes para o conjunto de testes. Procedendo desta forma, seriam realizados testes",
+      "alternativas": {
+        "A": "de Revisão de Funcionalidade.",
+        "B": "Gama.",
+        "C": "de Aceite Operacional.",
+        "D": "de Regressão.",
+        "E": "de Caixa-preta."
+      },
+      "gabarito": "D"
+    },
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Engenharia de Software / Requisitos",
+      "enunciado": "Um Auditor Fiscal da área de Tecnologia da Informação está participando do processo de levantamento de requisitos para o desenvolvimento de um novo software. Os requisitos a seguir foram elencados: I. Um usuário deve ser capaz de pesquisar a lista de contribuintes devedores. II. O sistema deve gerar a lista de contribuintes com atendimento agendado naquele dia. III. O sistema deve se adequar às leis que garantem o sigilo das informações. IV. Cada usuário do sistema deverá ser identificado por um número de 8 dígitos. V. O Sistema deve ter suporte para os sistemas operacionais Linux e Windows. VI. A alteração dos dados de um contribuinte só poderá ser concretizada após confirmação. VII. Toda consulta deve retornar os valores solicitados em até 20 segundos. VIII. A gravação dos dados só deverá ser efetuada após o preenchimento de todos os campos de preenchimento obrigatório. IX. Os dados devem ser armazenados em servidores em cluster para garantir a disponibilidade. São requisitos funcionais os que constam APENAS em",
+      "alternativas": {
+        "A": "I, II, III, IV, V, VI e VII.",
+        "B": "II, IV, VII e VIII.",
+        "C": "I, II, IV, VI e VIII.",
+        "D": "IV, VI, VIII e IX.",
+        "E": "II, IV, V, VI e VIII."
+      },
+      "gabarito": "C"
+    },
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Métodos Ágeis (Scrum/XP)",
+      "enunciado": "Scrum e XP são metodologias ágeis usadas no contexto de desenvolvimento de software que",
+      "alternativas": {
+        "A": "podem ser usadas em conjunto, criando uma metodologia híbrida própria, de forma a unir as práticas de gestão do Scrum com as práticas de desenvolvimento da XP.",
+        "B": "utilizam reuniões diárias (Daily Meetings) de 15 minutos em pé para ajudar a tornar as reuniões mais produtivas, colaborativas e úteis.",
+        "C": "podem ser usadas juntas, desde que em um contexto em que o gerenciamento do projeto seja realizado por um framework como o PMBoK.",
+        "D": "não podem ser usadas em conjunto por serem ambas voltadas para a gestão do processo de desenvolvimento de software.",
+        "E": "podem ser usadas em conjunto, já que a XP foca mais na gestão do processo de desenvolvimento e a Scrum, no desenvolvimento propriamente dito."
+      },
+      "gabarito": "A"
+    },
+    {
+      "prova": "SEFAZ-BA",
+      "ano": 2019,
+      "disciplina": "Auditoria de TI / Controles Gerais",
+      "enunciado": "Um Auditor Fiscal da área de Tecnologia da Informação está participando da implantação de controles Gerais de TI relacionados ao desenvolvimento de sistemas, alterações de programas e segregação de funções. Percebeu que na organização inexiste processo sistematizado para desenvolvimento e manutenção de sistemas e, como controle, sugeriu, corretamente, que",
+      "alternativas": {
+        "A": "as políticas e os procedimentos específicos devem ser padronizados e formalizados para instalar e modificar softwares, bem como documentar e solucionar problemas com esses softwares.",
+        "B": "as alterações no sistema deverão ser aprovadas somente pelo proprietário do sistema, e não pela área de TI.",
+        "C": "as alterações de programas não se sujeitarão ao Processo de Desenvolvimento de Software institucional.",
+        "D": "os softwares alterados não precisarão ser testados e aprovados em ambiente específico de testes/homologação.",
+        "E": "os ambientes de desenvolvimento não deverão ser segregados (produção, homologação, teste e desenvolvimento)."
+      },
+      "gabarito": "A"
+    }
+  ]
 }
