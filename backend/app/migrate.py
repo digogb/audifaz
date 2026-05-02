@@ -75,4 +75,43 @@ async def migrate(db: AsyncSession):
     if await _table_exists(db, "study_materials") and not await _column_exists(db, "study_materials", "error_msg"):
         await db.execute(text("ALTER TABLE study_materials ADD COLUMN error_msg VARCHAR(500)"))
 
+    # user_topic_progress
+    if not await _table_exists(db, "user_topic_progress"):
+        await db.execute(text("""
+            CREATE TABLE user_topic_progress (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                topic_id INTEGER NOT NULL REFERENCES topics(id),
+                concluido BOOLEAN NOT NULL DEFAULT 0,
+                observacao VARCHAR(500),
+                UNIQUE(user_id, topic_id)
+            )
+        """))
+        # Migrar dados existentes: para cada topic concluído, criar um registro para o primeiro user
+        if default_user_id:
+            await db.execute(text("""
+                INSERT OR IGNORE INTO user_topic_progress (user_id, topic_id, concluido, observacao)
+                SELECT :uid, id, concluido, observacao FROM topics WHERE concluido = 1
+            """), {"uid": default_user_id})
+
+    # user_day_progress
+    if not await _table_exists(db, "user_day_progress"):
+        await db.execute(text("""
+            CREATE TABLE user_day_progress (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id),
+                study_day_id INTEGER NOT NULL REFERENCES study_days(id),
+                status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+                notas VARCHAR(2000),
+                UNIQUE(user_id, study_day_id)
+            )
+        """))
+        # Migrar dados existentes: dias com status != pendente para o primeiro user
+        if default_user_id:
+            await db.execute(text("""
+                INSERT OR IGNORE INTO user_day_progress (user_id, study_day_id, status, notas)
+                SELECT :uid, id, status, notas FROM study_days
+                WHERE status != 'pendente' OR notas IS NOT NULL
+            """), {"uid": default_user_id})
+
     await db.commit()

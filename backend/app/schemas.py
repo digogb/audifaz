@@ -43,7 +43,7 @@ class StudyDayOut(BaseModel):
     id: int
     data: date
     tipo: str
-    status: str
+    status: str = "pendente"
     notas: Optional[str] = None
     topics: List[TopicOut] = []
     week: Optional[WeekOut] = None

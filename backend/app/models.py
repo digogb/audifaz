@@ -94,6 +94,26 @@ class GeneratedQuestion(Base):
     material: Mapped["StudyMaterial"] = relationship(back_populates="questions")
 
 
+class UserTopicProgress(Base):
+    __tablename__ = "user_topic_progress"
+    __table_args__ = (UniqueConstraint("user_id", "topic_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    topic_id: Mapped[int] = mapped_column(ForeignKey("topics.id"), index=True)
+    concluido: Mapped[bool] = mapped_column(Boolean, default=False)
+    observacao: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
+
+class UserDayProgress(Base):
+    __tablename__ = "user_day_progress"
+    __table_args__ = (UniqueConstraint("user_id", "study_day_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    study_day_id: Mapped[int] = mapped_column(ForeignKey("study_days.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pendente")
+    notas: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+
+
 class QuestionAttempt(Base):
     __tablename__ = "question_attempts"
     __table_args__ = (UniqueConstraint("question_id", "user_id"),)
