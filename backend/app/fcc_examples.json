@@ -1,0 +1,12 @@
+{
+  "_instrucoes": "Adicione questões REAIS das provas de referência FCC. Cole o enunciado exato, alternativas, gabarito e ano/prova de origem. Quanto mais questões reais aqui, melhor a calibração do gerador.",
+  "_formato": {
+    "prova": "ex: SEFAZ-BA",
+    "ano": 2019,
+    "disciplina": "ex: Governança de TI",
+    "enunciado": "texto completo da questão",
+    "alternativas": {"A": "...", "B": "...", "C": "...", "D": "...", "E": "..."},
+    "gabarito": "A"
+  },
+  "questoes": []
+}

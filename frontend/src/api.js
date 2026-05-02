@@ -39,7 +39,7 @@ export const toggleTopic = (id) => api.put(`/topics/${id}/toggle`)
 // Material
 export const getMaterial = (dayId) => api.get(`/days/${dayId}/material`)
 export const generateMaterial = (dayId, model = 'claude-sonnet-4-6') =>
-  api.post(`/days/${dayId}/material/generate?model=${model}`, {}, { timeout: 300000 })
+  api.post(`/days/${dayId}/material/generate?model=${model}`, {})
 export const recordAttempt = (questionId, alternativa_escolhida, observacao) =>
   api.post(`/days/questions/${questionId}/attempt`, { alternativa_escolhida, observacao })
 

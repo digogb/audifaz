@@ -71,6 +71,9 @@ class StudyMaterial(Base):
     tokens_out: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     custo_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     cache_hit_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    validation_flags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="done")
+    error_msg: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     study_day: Mapped["StudyDay"] = relationship(back_populates="material")
     questions: Mapped[List["GeneratedQuestion"]] = relationship(
         back_populates="material", order_by="GeneratedQuestion.ordem"

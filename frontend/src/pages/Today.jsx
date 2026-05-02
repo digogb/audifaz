@@ -6,10 +6,15 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   Sparkles, CheckSquare, Square, ChevronDown, ChevronUp,
-  RefreshCw, ChevronLeft, ChevronRight,
+  RefreshCw, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck,
 } from 'lucide-react'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
+
+const MODEL_LABELS = {
+  'claude-sonnet-4-6': 'Sonnet 4.6',
+  'claude-opus-4-7': 'Opus 4.7',
+}
 
 const glass = {
   background: 'rgba(255,255,255,0.05)',
@@ -56,6 +61,57 @@ function GlassCard({ children, className = '', style: extraStyle = {} }) {
 
 function SectionLabel({ children }) {
   return <p className="text-[11px] font-medium text-white/40 uppercase tracking-widest mb-3">{children}</p>
+}
+
+const SEVERITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' }
+const SEVERITY_CLS = { alta: 'text-accent-orange', media: 'text-yellow-400', baixa: 'text-white/50' }
+
+function ValidationBanner({ flags }) {
+  const [open, setOpen] = useState(false)
+  if (flags === null || flags === undefined) return null
+
+  if (flags.length === 0) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-2.5 rounded-btn text-[12px] text-text-blue"
+        style={{ background: 'rgba(45,114,217,0.08)', border: '0.5px solid rgba(91,158,244,0.25)' }}>
+        <ShieldCheck size={13} strokeWidth={2} />
+        Validado — sem inconsistências detectadas
+      </div>
+    )
+  }
+
+  const altas = flags.filter(f => f.severidade === 'alta').length
+
+  return (
+    <div className="rounded-btn overflow-hidden"
+      style={{ background: 'rgba(212,132,90,0.08)', border: '0.5px solid rgba(212,132,90,0.35)' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left"
+      >
+        <div className="flex items-center gap-2 text-[12px] text-accent-orange font-medium">
+          <ShieldAlert size={13} strokeWidth={2} />
+          {flags.length} inconsistência{flags.length > 1 ? 's' : ''} detectada{flags.length > 1 ? 's' : ''}
+          {altas > 0 && <span className="text-[11px] text-white/50">({altas} alta{altas > 1 ? 's' : ''})</span>}
+        </div>
+        {open ? <ChevronUp size={12} className="text-white/40" /> : <ChevronDown size={12} className="text-white/40" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-3 space-y-2 border-t" style={{ borderColor: 'rgba(212,132,90,0.20)' }}>
+          {flags.map((f, i) => (
+            <div key={i} className="pt-2">
+              <div className="flex items-center gap-2 text-[11px] font-mono text-white/40 mb-0.5">
+                <span>{f.referencia}</span>
+                <span>·</span>
+                <span className={SEVERITY_CLS[f.severidade]}>{SEVERITY_LABEL[f.severidade]}</span>
+              </div>
+              <p className="text-[12px] text-white/70 leading-relaxed">{f.descricao}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function QuestionCard({ q }) {
@@ -161,6 +217,7 @@ export default function Today() {
   const [error, setError] = useState(null)
   const [notes, setNotes] = useState('')
   const notesTimer = useRef(null)
+  const pollTimer = useRef(null)
 
   const dateParam = searchParams.get('data')
 
@@ -186,6 +243,25 @@ export default function Today() {
   }, [])
 
   useEffect(() => { loadDay(dateParam) }, [dateParam, loadDay])
+
+  // Poll while material is generating
+  useEffect(() => {
+    if (material?.status !== 'generating') {
+      clearInterval(pollTimer.current)
+      return
+    }
+    pollTimer.current = setInterval(async () => {
+      try {
+        const res = await api.getMaterial(day.id)
+        if (res.data.status !== 'generating') {
+          setMaterial(res.data)
+          setQuestions(res.data.questions || [])
+          clearInterval(pollTimer.current)
+        }
+      } catch { /* ignore transient errors */ }
+    }, 4000)
+    return () => clearInterval(pollTimer.current)
+  }, [material?.status, day?.id])
 
   function navigate(dateStr) {
     if (dateStr) setSearchParams({ data: dateStr })
@@ -225,7 +301,7 @@ export default function Today() {
       setMaterial(res.data)
       setQuestions(res.data.questions || [])
     } catch (e) {
-      setError(e.response?.data?.detail || e.message || 'Erro ao gerar material')
+      setError(e.response?.data?.detail || e.message || 'Erro ao iniciar geração')
     } finally {
       setGenerating(false)
     }
@@ -389,11 +465,11 @@ export default function Today() {
               </select>
               <button
                 onClick={handleGenerate}
-                disabled={generating}
+                disabled={generating || material?.status === 'generating'}
                 className="flex items-center gap-2 px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors"
               >
                 {generating ? <RefreshCw size={13} strokeWidth={2} className="animate-spin" /> : <Sparkles size={13} strokeWidth={2} />}
-                {material && !generating ? 'Regenerar' : 'Gerar'}
+                {material?.status === 'done' && !generating ? 'Regenerar' : 'Gerar'}
               </button>
             </div>
           )}
@@ -409,28 +485,38 @@ export default function Today() {
           </div>
         )}
 
-        {generating && (
+        {(generating || material?.status === 'generating') && (
           <GlassCard className="px-5 py-4">
             <div className="flex items-center gap-3">
               <RefreshCw size={16} className="animate-spin text-accent-orange" />
               <div>
                 <p className="text-[13px] font-medium text-white">Gerando material...</p>
-                <p className="text-[11px] text-white/40 font-mono">~ 60s</p>
+                <p className="text-[11px] text-white/40 font-mono">~ 60–90s · pode fechar o app</p>
               </div>
             </div>
           </GlassCard>
         )}
 
-        {material && !generating && (
+        {material?.status === 'error' && (
+          <div className="rounded-btn px-4 py-3" style={{ background: 'rgba(212,132,90,0.10)', border: '0.5px solid rgba(212,132,90,0.35)' }}>
+            <p className="text-accent-orange text-[13px]">Erro na geração: {material.error_msg || 'falha desconhecida'}</p>
+          </div>
+        )}
+
+        {material && material.status === 'done' && !generating && (
           <>
             {material.custo_usd && (
               <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-white/40 font-mono flex-wrap">
+                <span className="text-white/60">{MODEL_LABELS[material.modelo] || material.modelo}</span>
+                <span>·</span>
                 <span>{material.tokens_in?.toLocaleString()} in</span>
                 <span>{material.tokens_out?.toLocaleString()} out</span>
                 <span>${material.custo_usd?.toFixed(4)}</span>
                 <span>cache {Math.round((material.cache_hit_ratio || 0) * 100)}%</span>
               </div>
             )}
+
+            <ValidationBanner flags={material.validation_flags} />
 
             <GlassCard className="p-4 sm:p-6 md:p-7">
               <div className="prose-study">

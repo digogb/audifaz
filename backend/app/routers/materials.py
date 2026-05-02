@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,13 +73,59 @@ async def get_material(
         "tokens_out": material.tokens_out,
         "custo_usd": material.custo_usd,
         "cache_hit_ratio": material.cache_hit_ratio,
+        "validation_flags": material.validation_flags,
+        "status": material.status or "done",
+        "error_msg": material.error_msg,
         "questions": questions_out,
     }
 
 
-@router.post("/{day_id}/material/generate", response_model=StudyMaterialOut)
+async def _run_generation_bg(material_id: int, topics: list[str], model: str):
+    try:
+        content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
+        validation_flags = await claude_client.validate_material(content_md, questions_data)
+
+        async with AsyncSessionLocal() as db:
+            material = await db.get(StudyMaterial, material_id)
+            if not material:
+                return
+            material.conteudo_md = content_md
+            material.tokens_in = usage_dict.get("input_tokens")
+            material.tokens_out = usage_dict.get("output_tokens")
+            material.custo_usd = _calc_cost(model, usage_dict)
+            material.cache_hit_ratio = _calc_cache_ratio(usage_dict)
+            material.validation_flags = validation_flags
+            material.status = "done"
+            material.error_msg = None
+
+            for i, q in enumerate(questions_data):
+                db.add(GeneratedQuestion(
+                    study_material_id=material_id,
+                    enunciado=q.get("enunciado", ""),
+                    alternativas=q.get("alternativas", {}),
+                    gabarito=q.get("gabarito", "A"),
+                    comentario=q.get("comentario", ""),
+                    disciplina=q.get("disciplina", ""),
+                    dificuldade=q.get("dificuldade", "medio"),
+                    ordem=i,
+                ))
+            await db.commit()
+    except Exception as exc:
+        try:
+            async with AsyncSessionLocal() as db:
+                material = await db.get(StudyMaterial, material_id)
+                if material:
+                    material.status = "error"
+                    material.error_msg = str(exc)[:500]
+                    await db.commit()
+        except Exception:
+            pass
+
+
+@router.post("/{day_id}/material/generate", response_model=StudyMaterialOut, status_code=202)
 async def generate_material(
     day_id: int,
+    background_tasks: BackgroundTasks,
     model: str = Query("claude-sonnet-4-6"),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_admin_user),
@@ -100,14 +146,25 @@ async def generate_material(
     if not topics:
         raise HTTPException(400, "Nenhum tópico encontrado")
 
-    content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
-
-    # Replace existing material
+    # Delete any existing material
     existing = await db.execute(
         select(StudyMaterial).where(StudyMaterial.study_day_id == day_id)
     )
     existing_material = existing.scalar_one_or_none()
     if existing_material:
+        if existing_material.status == "generating":
+            return {
+                "id": existing_material.id,
+                "gerado_em": existing_material.gerado_em,
+                "modelo": existing_material.modelo,
+                "conteudo_md": "",
+                "status": "generating",
+                "error_msg": None,
+                "tokens_in": None, "tokens_out": None,
+                "custo_usd": None, "cache_hit_ratio": None,
+                "validation_flags": None,
+                "questions": [],
+            }
         await db.execute(
             delete(GeneratedQuestion).where(
                 GeneratedQuestion.study_material_id == existing_material.id
@@ -119,60 +176,29 @@ async def generate_material(
     material = StudyMaterial(
         study_day_id=day_id,
         modelo=model,
-        conteudo_md=content_md,
-        tokens_in=usage_dict.get("input_tokens"),
-        tokens_out=usage_dict.get("output_tokens"),
-        custo_usd=_calc_cost(model, usage_dict),
-        cache_hit_ratio=_calc_cache_ratio(usage_dict),
+        conteudo_md="",
+        status="generating",
     )
     db.add(material)
-    await db.flush()  # assigns material.id
+    await db.flush()
+    material_id = material.id
 
-    gq_objects = []
-    for i, q in enumerate(questions_data):
-        gq = GeneratedQuestion(
-            study_material_id=material.id,
-            enunciado=q.get("enunciado", ""),
-            alternativas=q.get("alternativas", {}),
-            gabarito=q.get("gabarito", "A"),
-            comentario=q.get("comentario", ""),
-            disciplina=q.get("disciplina", ""),
-            dificuldade=q.get("dificuldade", "medio"),
-            ordem=i,
-        )
-        db.add(gq)
-        gq_objects.append(gq)
-
-    await db.flush()  # assigns ids to all questions before commit expires them
-
-    # Capture all data while session is still live
-    material_snapshot = {
+    snapshot = {
         "id": material.id,
         "gerado_em": material.gerado_em,
         "modelo": material.modelo,
-        "conteudo_md": material.conteudo_md,
-        "tokens_in": material.tokens_in,
-        "tokens_out": material.tokens_out,
-        "custo_usd": material.custo_usd,
-        "cache_hit_ratio": material.cache_hit_ratio,
-        "questions": [
-            {
-                "id": gq.id,
-                "enunciado": gq.enunciado,
-                "alternativas": gq.alternativas,
-                "gabarito": gq.gabarito,
-                "comentario": gq.comentario,
-                "disciplina": gq.disciplina,
-                "dificuldade": gq.dificuldade,
-                "ordem": gq.ordem,
-                "attempt": None,
-            }
-            for gq in gq_objects
-        ],
+        "conteudo_md": "",
+        "status": "generating",
+        "error_msg": None,
+        "tokens_in": None, "tokens_out": None,
+        "custo_usd": None, "cache_hit_ratio": None,
+        "validation_flags": None,
+        "questions": [],
     }
 
     await db.commit()
-    return material_snapshot
+    background_tasks.add_task(_run_generation_bg, material_id, topics, model)
+    return snapshot
 
 
 async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
@@ -197,6 +223,7 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
         topics = [t.descricao for t in day.topics]
 
     content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
+    validation_flags = await claude_client.validate_material(content_md, questions_data)
 
     async with AsyncSessionLocal() as db:
         material = StudyMaterial(
@@ -207,6 +234,8 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
             tokens_out=usage_dict.get("output_tokens"),
             custo_usd=_calc_cost(model, usage_dict),
             cache_hit_ratio=_calc_cache_ratio(usage_dict),
+            validation_flags=validation_flags,
+            status="done",
         )
         db.add(material)
         await db.flush()

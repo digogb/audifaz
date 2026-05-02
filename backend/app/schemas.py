@@ -85,6 +85,9 @@ class StudyMaterialOut(BaseModel):
     tokens_out: Optional[int] = None
     custo_usd: Optional[float] = None
     cache_hit_ratio: Optional[float] = None
+    validation_flags: Optional[list] = None
+    status: str = "done"
+    error_msg: Optional[str] = None
     questions: List[GeneratedQuestionOut] = []
 
 

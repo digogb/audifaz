@@ -1,7 +1,35 @@
 import json
+from pathlib import Path
 from anthropic import AsyncAnthropic
 
 _client = AsyncAnthropic()
+
+_EXAMPLES_PATH = Path(__file__).parent / "fcc_examples.json"
+
+
+def _load_fcc_examples() -> list[dict]:
+    if not _EXAMPLES_PATH.exists():
+        return []
+    try:
+        data = json.loads(_EXAMPLES_PATH.read_text(encoding="utf-8"))
+        return [q for q in data.get("questoes", []) if q.get("enunciado")]
+    except Exception:
+        return []
+
+
+def _fmt_examples_block(questoes: list[dict]) -> str:
+    lines = ["**Questões reais das provas de referência FCC — use para calibrar estilo, conteúdo e gabaritos:**\n"]
+    for i, q in enumerate(questoes[:12], 1):
+        prova = q.get("prova", "")
+        ano = q.get("ano", "")
+        disciplina = q.get("disciplina", "")
+        lines.append(f"**Q{i}** ({prova} {ano} — {disciplina})")
+        lines.append(q.get("enunciado", ""))
+        for alt, txt in q.get("alternativas", {}).items():
+            lines.append(f"{alt}) {txt}")
+        lines.append(f"Gabarito: {q.get('gabarito', '')}")
+        lines.append("")
+    return "\n".join(lines)
 
 _SYSTEM_PROFILE = """Você é um assistente de estudos especializado em concursos públicos brasileiros, com foco na banca FCC (Fundação Carlos Chagas).
 
@@ -83,6 +111,43 @@ _TOOL = {
     }
 }
 
+_VALIDATION_TOOL = {
+    "name": "registrar_flags",
+    "description": "Registra inconsistências ou afirmações potencialmente incorretas encontradas no material.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "flags": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "tipo": {"type": "string", "enum": ["conteudo", "questao"]},
+                        "referencia": {"type": "string", "description": "ex: 'Seção 2', 'Questão 5'"},
+                        "descricao": {"type": "string", "description": "O que está potencialmente errado e por quê"},
+                        "severidade": {"type": "string", "enum": ["alta", "media", "baixa"]}
+                    },
+                    "required": ["tipo", "referencia", "descricao", "severidade"]
+                }
+            }
+        },
+        "required": ["flags"]
+    }
+}
+
+_VALIDATION_SYSTEM = """Você é um auditor de precisão técnica para materiais de concurso público focado em frameworks de TI.
+
+Sinalize APENAS afirmações com risco real de erro. Seja criterioso — prefira falsos negativos a falsos positivos.
+
+Priorize verificar:
+- Nomes exatos de domínios/práticas/objetivos COBIT 2019 e ITIL 4 (atribuição ao framework errado é armadilha clássica)
+- Versões confundidas: COBIT 5 vs 2019, ITIL v3 vs v4, PMBOK 6ª vs 7ª, ISO 27001:2013 vs 2022
+- Quantidade de controles ISO 27001:2022 (são 93, divididos em 4 categorias — não 114 da versão 2013)
+- Gabarito de questão que contradiz o próprio comentário explicativo
+- Códigos de objetivos COBIT (ex: APO, BAI, DSS, MEA) atribuídos ao domínio errado
+
+NÃO sinalize: conceitos gerais corretos, simplificações pedagógicas razoáveis, estilo ou formatação."""
+
 _PRICES = {
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_write": 3.75, "cache_read": 0.30},
     "claude-opus-4-7": {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50},
@@ -142,6 +207,14 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
         {"type": "text", "text": _FCC_METHODOLOGY, "cache_control": {"type": "ephemeral"}},
     ]
 
+    examples = _load_fcc_examples()
+    if examples:
+        system_blocks.append({
+            "type": "text",
+            "text": _fmt_examples_block(examples),
+            "cache_control": {"type": "ephemeral"},
+        })
+
     params: dict = {
         "model": model,
         "max_tokens": 20000,
@@ -186,6 +259,32 @@ async def generate_material(topics: list[str], model: str = "claude-sonnet-4-6")
     }
 
     return content_md, questions_data, usage_dict
+
+
+async def validate_material(content_md: str, questions_data: list) -> list[dict]:
+    """Second-pass validation. Returns list of flags (empty = no issues found)."""
+    questions_json = json.dumps(questions_data[:5], ensure_ascii=False, indent=2)
+    user_msg = (
+        "Analise o material abaixo. Chame `registrar_flags` com todas as inconsistências encontradas "
+        "(ou com `flags: []` se não encontrar problemas).\n\n"
+        f"--- CONTEÚDO ---\n{content_md[:6000]}\n\n"
+        f"--- QUESTÕES (primeiras 5) ---\n{questions_json[:4000]}"
+    )
+    try:
+        response = await _client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1500,
+            system=_VALIDATION_SYSTEM,
+            tools=[_VALIDATION_TOOL],
+            tool_choice={"type": "tool", "name": "registrar_flags"},
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "registrar_flags":
+                return block.input.get("flags", [])
+    except Exception:
+        pass
+    return []
 
 
 async def generate_material_stream(topics: list[str], model: str = "claude-sonnet-4-6"):

@@ -65,4 +65,14 @@ async def migrate(db: AsyncSession):
         await db.execute(text("DROP TABLE question_attempts"))
         await db.execute(text("ALTER TABLE question_attempts_new RENAME TO question_attempts"))
 
+    # study_materials.validation_flags
+    if await _table_exists(db, "study_materials") and not await _column_exists(db, "study_materials", "validation_flags"):
+        await db.execute(text("ALTER TABLE study_materials ADD COLUMN validation_flags JSON"))
+
+    # study_materials.status + error_msg
+    if await _table_exists(db, "study_materials") and not await _column_exists(db, "study_materials", "status"):
+        await db.execute(text("ALTER TABLE study_materials ADD COLUMN status VARCHAR(20) DEFAULT 'done'"))
+    if await _table_exists(db, "study_materials") and not await _column_exists(db, "study_materials", "error_msg"):
+        await db.execute(text("ALTER TABLE study_materials ADD COLUMN error_msg VARCHAR(500)"))
+
     await db.commit()
