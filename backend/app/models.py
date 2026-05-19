@@ -15,13 +15,45 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     podcast_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    concurso_atual_id: Mapped[Optional[int]] = mapped_column(ForeignKey("concursos.id"), nullable=True)
+    is_internal: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class Concurso(Base):
+    __tablename__ = "concursos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    nome: Mapped[str] = mapped_column(String(200))
+    banca: Mapped[str] = mapped_column(String(50))
+    orgao: Mapped[str] = mapped_column(String(120))
+    cargo: Mapped[str] = mapped_column(String(120))
+    data_prova: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    descricao: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    edital_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    prompt_extra: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    publico: Mapped[bool] = mapped_column(Boolean, default=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    phases: Mapped[List["Phase"]] = relationship(back_populates="concurso", order_by="Phase.numero")
+
+
+class UserConcurso(Base):
+    __tablename__ = "user_concursos"
+    __table_args__ = (UniqueConstraint("user_id", "concurso_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    concurso_id: Mapped[int] = mapped_column(ForeignKey("concursos.id"), index=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Phase(Base):
     __tablename__ = "phases"
     id: Mapped[int] = mapped_column(primary_key=True)
+    concurso_id: Mapped[int] = mapped_column(ForeignKey("concursos.id"), index=True)
     numero: Mapped[int]
     nome: Mapped[str] = mapped_column(String(200))
+    concurso: Mapped["Concurso"] = relationship(back_populates="phases")
     weeks: Mapped[List["Week"]] = relationship(back_populates="phase", order_by="Week.numero")
 
 
@@ -131,6 +163,7 @@ class ErrorEntry(Base):
     __tablename__ = "error_entries"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    concurso_id: Mapped[Optional[int]] = mapped_column(ForeignKey("concursos.id"), nullable=True, index=True)
     origem: Mapped[str] = mapped_column(String(10), default="manual")  # gerada|manual
     question_id: Mapped[Optional[int]] = mapped_column(ForeignKey("generated_questions.id"), nullable=True)
     data: Mapped[date] = mapped_column(Date, index=True)
@@ -148,6 +181,7 @@ class MockExam(Base):
     __tablename__ = "mock_exams"
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    concurso_id: Mapped[Optional[int]] = mapped_column(ForeignKey("concursos.id"), nullable=True, index=True)
     data: Mapped[date] = mapped_column(Date)
     tipo: Mapped[str] = mapped_column(String(30))  # ti_especifico|conhec_gerais|discursiva|completo
     observacoes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

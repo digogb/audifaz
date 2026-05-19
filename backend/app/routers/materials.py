@@ -4,13 +4,25 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
-from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio
+from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio
-from ..auth import get_current_user, get_admin_user
+from ..auth import get_current_user, get_admin_user, get_current_concurso
 
 router = APIRouter(prefix="/api/days", tags=["materials"])
+
+
+async def _ensure_day_in_concurso(db: AsyncSession, day_id: int, concurso_id: int) -> None:
+    """Raises 404 if day doesn't belong to the given concurso."""
+    result = await db.execute(
+        select(StudyDay.id)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .where(StudyDay.id == day_id, Phase.concurso_id == concurso_id)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(404, "Dia não encontrado")
 
 
 @router.get("/{day_id}/material", response_model=StudyMaterialOut)
@@ -18,7 +30,9 @@ async def get_material(
     day_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
+    await _ensure_day_in_concurso(db, day_id, concurso.id)
     result = await db.execute(
         select(StudyMaterial)
         .options(selectinload(StudyMaterial.questions))
@@ -151,10 +165,12 @@ async def generate_material(
     model: str = Query("claude-sonnet-4-6"),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_admin_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
     if model not in ("claude-sonnet-4-6", "claude-opus-4-7"):
         raise HTTPException(400, "Modelo inválido")
 
+    await _ensure_day_in_concurso(db, day_id, concurso.id)
     result = await db.execute(
         select(StudyDay)
         .options(selectinload(StudyDay.topics))
@@ -285,7 +301,20 @@ async def record_attempt(
     body: AttemptCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
+    # Verifica que a questão pertence a um dia do concurso atual
+    owns = await db.execute(
+        select(GeneratedQuestion.id)
+        .join(StudyMaterial, GeneratedQuestion.study_material_id == StudyMaterial.id)
+        .join(StudyDay, StudyMaterial.study_day_id == StudyDay.id)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .where(GeneratedQuestion.id == question_id, Phase.concurso_id == concurso.id)
+    )
+    if not owns.scalar_one_or_none():
+        raise HTTPException(404)
+
     question = await db.get(GeneratedQuestion, question_id)
     if not question:
         raise HTTPException(404)
@@ -329,6 +358,7 @@ async def record_attempt(
             error = ErrorEntry(
                 origem="gerada",
                 user_id=current_user.id,
+                concurso_id=concurso.id,
                 question_id=question_id,
                 data=today,
                 disciplina=question.disciplina,

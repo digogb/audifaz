@@ -185,3 +185,18 @@ class MaterialAudioOut(BaseModel):
 class PodcastTokenOut(BaseModel):
     token: str
     feed_url: str
+
+
+class ConcursoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    slug: str
+    nome: str
+    banca: str
+    orgao: str
+    cargo: str
+    data_prova: Optional[date] = None
+    descricao: Optional[str] = None
+    edital_url: Optional[str] = None
+    ativo: bool
+    atual: bool = False

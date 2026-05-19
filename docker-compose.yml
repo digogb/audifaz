@@ -13,6 +13,7 @@ services:
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
+      - SKIP_STARTUP_GEN=${SKIP_STARTUP_GEN:-}
       - TZ=America/Fortaleza
     restart: unless-stopped
 

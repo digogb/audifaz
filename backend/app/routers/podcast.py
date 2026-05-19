@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
-from ..models import MaterialAudio, StudyDay, StudyMaterial, User
+from ..models import MaterialAudio, StudyDay, StudyMaterial, User, Week, Phase, Concurso
 
 router = APIRouter(prefix="/api/podcast", tags=["podcast"])
 
@@ -69,11 +69,16 @@ async def rss_feed(token: str, db: AsyncSession = Depends(get_db)):
     if not user:
         raise HTTPException(404)
 
+    if not user.concurso_atual_id:
+        raise HTTPException(404, "Usuário sem concurso ativo")
+
     stmt = (
         select(MaterialAudio, StudyDay.data)
         .join(StudyMaterial, MaterialAudio.study_material_id == StudyMaterial.id)
         .join(StudyDay, StudyMaterial.study_day_id == StudyDay.id)
-        .where(MaterialAudio.status == "done")
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .where(MaterialAudio.status == "done", Phase.concurso_id == user.concurso_atual_id)
         .order_by(StudyDay.data.desc())
         .limit(MAX_EPISODES)
     )
@@ -99,6 +104,20 @@ async def serve_audio(
     ).scalar_one_or_none()
     if not user:
         raise HTTPException(404)
+
+    # Confirma que o áudio pertence ao concurso atual do usuário (defesa contra
+    # adivinhação de IDs entre concursos)
+    if user.concurso_atual_id:
+        owns = await db.execute(
+            select(MaterialAudio.id)
+            .join(StudyMaterial, MaterialAudio.study_material_id == StudyMaterial.id)
+            .join(StudyDay, StudyMaterial.study_day_id == StudyDay.id)
+            .join(Week, StudyDay.week_id == Week.id)
+            .join(Phase, Week.phase_id == Phase.id)
+            .where(MaterialAudio.id == audio_id, Phase.concurso_id == user.concurso_atual_id)
+        )
+        if not owns.scalar_one_or_none():
+            raise HTTPException(404)
 
     audio = await db.get(MaterialAudio, audio_id)
     if not audio or audio.status != "done" or not audio.arquivo_path:

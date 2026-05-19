@@ -4,9 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import ErrorEntry, User
+from ..models import ErrorEntry, User, Concurso
 from ..schemas import ErrorEntryOut, ErrorEntryCreate
-from ..auth import get_current_user
+from ..auth import get_current_user, get_current_concurso
 from typing import Optional
 
 router = APIRouter(prefix="/api/errors", tags=["errors"])
@@ -22,8 +22,13 @@ async def list_errors(
     dias: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
-    q = select(ErrorEntry).where(ErrorEntry.user_id == current_user.id).order_by(ErrorEntry.data.desc())
+    q = (
+        select(ErrorEntry)
+        .where(ErrorEntry.user_id == current_user.id, ErrorEntry.concurso_id == concurso.id)
+        .order_by(ErrorEntry.data.desc())
+    )
 
     if disciplina:
         q = q.where(ErrorEntry.disciplina == disciplina)
@@ -43,12 +48,17 @@ async def list_errors(
 
 
 @router.get("/stale-count")
-async def stale_count(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def stale_count(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
     from datetime import timedelta
     cutoff = datetime.now(TZ) - timedelta(days=7)
     result = await db.execute(
         select(ErrorEntry)
         .where(ErrorEntry.user_id == current_user.id)
+        .where(ErrorEntry.concurso_id == concurso.id)
         .where(ErrorEntry.revisado_em.is_(None))
         .where(ErrorEntry.data <= cutoff.date())
     )
@@ -56,8 +66,13 @@ async def stale_count(db: AsyncSession = Depends(get_db), current_user: User = D
 
 
 @router.post("", response_model=ErrorEntryOut)
-async def create_error(body: ErrorEntryCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    error = ErrorEntry(**body.model_dump(), user_id=current_user.id)
+async def create_error(
+    body: ErrorEntryCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
+    error = ErrorEntry(**body.model_dump(), user_id=current_user.id, concurso_id=concurso.id)
     db.add(error)
     await db.commit()
     await db.refresh(error)
@@ -85,8 +100,14 @@ async def delete_error(error_id: int, db: AsyncSession = Depends(get_db), curren
 
 
 @router.get("/disciplines")
-async def list_disciplines(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def list_disciplines(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
     result = await db.execute(
-        select(ErrorEntry.disciplina).where(ErrorEntry.user_id == current_user.id).distinct()
+        select(ErrorEntry.disciplina)
+        .where(ErrorEntry.user_id == current_user.id, ErrorEntry.concurso_id == concurso.id)
+        .distinct()
     )
     return sorted(r[0] for r in result.all())

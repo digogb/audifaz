@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_admin_user, get_current_user
+from ..auth import get_admin_user, get_current_user, get_current_concurso
 from ..db import get_db
-from ..models import MaterialAudio, StudyDay, StudyMaterial, User
+from ..models import MaterialAudio, StudyDay, StudyMaterial, User, Week, Phase, Concurso
 from ..schemas import MaterialAudioOut, PodcastTokenOut
 
 router = APIRouter(tags=["audios"])
@@ -41,11 +41,14 @@ def _to_out(audio: MaterialAudio, token: Optional[str]) -> MaterialAudioOut:
     )
 
 
-async def _get_audio_for_day(db: AsyncSession, day_id: int) -> Optional[MaterialAudio]:
+async def _get_audio_for_day(db: AsyncSession, day_id: int, concurso_id: int) -> Optional[MaterialAudio]:
     stmt = (
         select(MaterialAudio)
         .join(StudyMaterial, MaterialAudio.study_material_id == StudyMaterial.id)
-        .where(StudyMaterial.study_day_id == day_id)
+        .join(StudyDay, StudyMaterial.study_day_id == StudyDay.id)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .where(StudyMaterial.study_day_id == day_id, Phase.concurso_id == concurso_id)
     )
     return (await db.execute(stmt)).scalar_one_or_none()
 
@@ -55,8 +58,9 @@ async def get_audio(
     day_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
-    audio = await _get_audio_for_day(db, day_id)
+    audio = await _get_audio_for_day(db, day_id, concurso.id)
     if not audio:
         return None
     return _to_out(audio, current_user.podcast_token)
@@ -67,7 +71,16 @@ async def trigger_audio(
     day_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_admin_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
+    owns = await db.execute(
+        select(StudyDay.id)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .where(StudyDay.id == day_id, Phase.concurso_id == concurso.id)
+    )
+    if not owns.scalar_one_or_none():
+        raise HTTPException(404, "Dia não encontrado")
     day = await db.get(StudyDay, day_id)
     if not day:
         raise HTTPException(404, "Dia não encontrado")

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ConcursoProvider } from './contexts/ConcursoContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Today from './pages/Today'
@@ -31,7 +32,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <ConcursoProvider>
+          <AppRoutes />
+        </ConcursoProvider>
       </AuthProvider>
     </BrowserRouter>
   )

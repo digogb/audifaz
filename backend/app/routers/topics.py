@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import Topic, UserTopicProgress, UserDayProgress, User
-from ..auth import get_current_user
+from ..models import Topic, UserTopicProgress, UserDayProgress, User, StudyDay, Week, Phase, Concurso
+from ..auth import get_current_user, get_current_concurso
 
 router = APIRouter(prefix="/api/topics", tags=["topics"])
 
@@ -50,7 +50,18 @@ async def toggle_topic(
     topic_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
 ):
+    owns = await db.execute(
+        select(Topic.id)
+        .join(StudyDay, Topic.study_day_id == StudyDay.id)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .where(Topic.id == topic_id, Phase.concurso_id == concurso.id)
+    )
+    if not owns.scalar_one_or_none():
+        raise HTTPException(404)
+
     topic = await db.get(Topic, topic_id)
     if not topic:
         raise HTTPException(404)

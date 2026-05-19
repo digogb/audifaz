@@ -3,17 +3,26 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import StudyDay, Topic, Phase, Week, MockExam, MockExamResult, User, UserTopicProgress, UserDayProgress
+from ..models import StudyDay, Topic, Phase, Week, MockExam, MockExamResult, User, UserTopicProgress, UserDayProgress, Concurso
 from ..schemas import ProgressDay, PhaseProgress
-from ..auth import get_current_user
+from ..auth import get_current_user, get_current_concurso
 
 router = APIRouter(prefix="/api/progress", tags=["progress"])
 
 
 @router.get("")
-async def get_progress(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_progress(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
     days_result = await db.execute(
-        select(StudyDay).options(selectinload(StudyDay.topics)).order_by(StudyDay.data)
+        select(StudyDay)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
+        .options(selectinload(StudyDay.topics))
+        .where(Phase.concurso_id == concurso.id)
+        .order_by(StudyDay.data)
     )
     days = days_result.scalars().all()
 
@@ -49,9 +58,10 @@ async def get_progress(db: AsyncSession = Depends(get_db), current_user: User = 
     ]
 
     phases_result = await db.execute(
-        select(Phase).options(
-            selectinload(Phase.weeks).selectinload(Week.days)
-        ).order_by(Phase.numero)
+        select(Phase)
+        .options(selectinload(Phase.weeks).selectinload(Week.days))
+        .where(Phase.concurso_id == concurso.id)
+        .order_by(Phase.numero)
     )
     phases = phases_result.scalars().all()
 
@@ -71,7 +81,7 @@ async def get_progress(db: AsyncSession = Depends(get_db), current_user: User = 
     mocks_result = await db.execute(
         select(MockExam)
         .options(selectinload(MockExam.results))
-        .where(MockExam.user_id == current_user.id)
+        .where(MockExam.user_id == current_user.id, MockExam.concurso_id == concurso.id)
         .order_by(MockExam.data)
     )
     mocks = mocks_result.scalars().all()

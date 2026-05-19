@@ -5,9 +5,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import StudyDay, Topic, Week, Phase, User, UserTopicProgress, UserDayProgress
+from ..models import StudyDay, Topic, Week, Phase, User, UserTopicProgress, UserDayProgress, Concurso
 from ..schemas import StudyDayOut, StudyDayWithPhase
-from ..auth import get_current_user
+from ..auth import get_current_user, get_current_concurso
 
 router = APIRouter(prefix="/api/days", tags=["days"])
 
@@ -64,14 +64,16 @@ async def _apply_user_progress(db: AsyncSession, day: StudyDay, user_id: int) ->
     }
 
 
-async def _load_day_raw(db: AsyncSession, day_id: int) -> StudyDay:
+async def _load_day_raw(db: AsyncSession, day_id: int, concurso_id: int) -> StudyDay:
     result = await db.execute(
         select(StudyDay)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
         .options(
             selectinload(StudyDay.topics),
             selectinload(StudyDay.week).selectinload(Week.phase),
         )
-        .where(StudyDay.id == day_id)
+        .where(StudyDay.id == day_id, Phase.concurso_id == concurso_id)
     )
     day = result.scalar_one_or_none()
     if not day:
@@ -97,25 +99,33 @@ async def _build_response(db: AsyncSession, day: StudyDay, user_id: int) -> Stud
 
 
 @router.get("/today", response_model=StudyDayWithPhase)
-async def get_today(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_today(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
     today = _today()
     result = await db.execute(
         select(StudyDay)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
         .options(
             selectinload(StudyDay.topics),
             selectinload(StudyDay.week).selectinload(Week.phase),
         )
-        .where(StudyDay.data == today)
+        .where(StudyDay.data == today, Phase.concurso_id == concurso.id)
     )
     day = result.scalar_one_or_none()
     if not day:
         result = await db.execute(
             select(StudyDay)
+            .join(Week, StudyDay.week_id == Week.id)
+            .join(Phase, Week.phase_id == Phase.id)
             .options(
                 selectinload(StudyDay.topics),
                 selectinload(StudyDay.week).selectinload(Week.phase),
             )
-            .where(StudyDay.data >= today)
+            .where(StudyDay.data >= today, Phase.concurso_id == concurso.id)
             .order_by(StudyDay.data)
             .limit(1)
         )
@@ -126,13 +136,23 @@ async def get_today(db: AsyncSession = Depends(get_db), current_user: User = Dep
 
 
 @router.get("/{day_id}", response_model=StudyDayWithPhase)
-async def get_day(day_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    day = await _load_day_raw(db, day_id)
+async def get_day(
+    day_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
+    day = await _load_day_raw(db, day_id, concurso.id)
     return await _build_response(db, day, current_user.id)
 
 
 @router.get("/by-date/{date_str}", response_model=StudyDayWithPhase)
-async def get_day_by_date(date_str: str, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def get_day_by_date(
+    date_str: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
     from datetime import date as date_type
     try:
         target = date_type.fromisoformat(date_str)
@@ -140,11 +160,13 @@ async def get_day_by_date(date_str: str, db: AsyncSession = Depends(get_db), cur
         raise HTTPException(400, "Data inválida, use YYYY-MM-DD")
     result = await db.execute(
         select(StudyDay)
+        .join(Week, StudyDay.week_id == Week.id)
+        .join(Phase, Week.phase_id == Phase.id)
         .options(
             selectinload(StudyDay.topics),
             selectinload(StudyDay.week).selectinload(Week.phase),
         )
-        .where(StudyDay.data == target)
+        .where(StudyDay.data == target, Phase.concurso_id == concurso.id)
     )
     day = result.scalar_one_or_none()
     if not day:
@@ -153,10 +175,13 @@ async def get_day_by_date(date_str: str, db: AsyncSession = Depends(get_db), cur
 
 
 @router.put("/{day_id}/status")
-async def update_status(day_id: int, body: dict, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    day = await db.get(StudyDay, day_id)
-    if not day:
-        raise HTTPException(404)
+async def update_status(
+    day_id: int, body: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
+    await _load_day_raw(db, day_id, concurso.id)  # ownership check
     status = body.get("status")
     if status not in ("pendente", "em_andamento", "concluido"):
         raise HTTPException(400, "Status inválido")
@@ -177,10 +202,13 @@ async def update_status(day_id: int, body: dict, db: AsyncSession = Depends(get_
 
 
 @router.put("/{day_id}/notes")
-async def update_notes(day_id: int, body: dict, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    day = await db.get(StudyDay, day_id)
-    if not day:
-        raise HTTPException(404)
+async def update_notes(
+    day_id: int, body: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
+    await _load_day_raw(db, day_id, concurso.id)  # ownership check
 
     result = await db.execute(
         select(UserDayProgress).where(
@@ -198,8 +226,13 @@ async def update_notes(day_id: int, body: dict, db: AsyncSession = Depends(get_d
 
 
 @router.get("/{day_id}/week-context")
-async def week_context(day_id: int, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    day = await _load_day_raw(db, day_id)
+async def week_context(
+    day_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    concurso: Concurso = Depends(get_current_concurso),
+):
+    day = await _load_day_raw(db, day_id, concurso.id)
     if not day.week:
         return {}
 

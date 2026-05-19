@@ -1,4 +1,5 @@
 """Idempotent SQLite migrations for adding multi-user columns."""
+import os
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -141,5 +142,79 @@ async def migrate(db: AsyncSession):
                 SELECT :uid, id, status, notas FROM study_days
                 WHERE status != 'pendente' OR notas IS NOT NULL
             """), {"uid": default_user_id})
+
+    # --- Multi-concurso ---
+    # Insere concurso default SEFAZ-CE se ainda não existir (table criada por create_all)
+    if await _table_exists(db, "concursos"):
+        row = await db.execute(text("SELECT id FROM concursos WHERE slug = 'sefaz-ce-2026'"))
+        default_concurso_id = row.scalar_one_or_none()
+        if not default_concurso_id:
+            await db.execute(text("""
+                INSERT INTO concursos (slug, nome, banca, orgao, cargo, data_prova,
+                                       descricao, ativo, publico, criado_em)
+                VALUES ('sefaz-ce-2026',
+                        'SEFAZ-CE 2026 — Auditor Fiscal TI',
+                        'FCC', 'SEFAZ-CE', 'B02 Auditor-Fiscal TI',
+                        '2026-08-01',
+                        'Concurso para Auditor Fiscal de TI da Secretaria da Fazenda do Ceará',
+                        1, 1, datetime('now'))
+            """))
+            row = await db.execute(text("SELECT id FROM concursos WHERE slug = 'sefaz-ce-2026'"))
+            default_concurso_id = row.scalar_one()
+
+        # phases.concurso_id
+        if await _table_exists(db, "phases") and not await _column_exists(db, "phases", "concurso_id"):
+            await db.execute(text("ALTER TABLE phases ADD COLUMN concurso_id INTEGER REFERENCES concursos(id)"))
+            await db.execute(
+                text("UPDATE phases SET concurso_id = :cid WHERE concurso_id IS NULL"),
+                {"cid": default_concurso_id},
+            )
+            await db.execute(text("CREATE INDEX IF NOT EXISTS ix_phases_concurso_id ON phases(concurso_id)"))
+
+        # users.concurso_atual_id
+        if not await _column_exists(db, "users", "concurso_atual_id"):
+            await db.execute(text("ALTER TABLE users ADD COLUMN concurso_atual_id INTEGER REFERENCES concursos(id)"))
+            await db.execute(
+                text("UPDATE users SET concurso_atual_id = :cid WHERE concurso_atual_id IS NULL"),
+                {"cid": default_concurso_id},
+            )
+
+        # users.is_internal
+        if not await _column_exists(db, "users", "is_internal"):
+            await db.execute(text("ALTER TABLE users ADD COLUMN is_internal BOOLEAN NOT NULL DEFAULT 0"))
+            admin_username = os.environ.get("ADMIN_USERNAME", "").strip()
+            if admin_username:
+                await db.execute(
+                    text("UPDATE users SET is_internal = 1 WHERE username = :u"),
+                    {"u": admin_username},
+                )
+
+        # Vincula todos os users existentes ao concurso default
+        if await _table_exists(db, "user_concursos"):
+            await db.execute(
+                text("""
+                    INSERT OR IGNORE INTO user_concursos (user_id, concurso_id, ativo, criado_em)
+                    SELECT id, :cid, 1, datetime('now') FROM users
+                """),
+                {"cid": default_concurso_id},
+            )
+
+        # error_entries.concurso_id
+        if await _table_exists(db, "error_entries") and not await _column_exists(db, "error_entries", "concurso_id"):
+            await db.execute(text("ALTER TABLE error_entries ADD COLUMN concurso_id INTEGER REFERENCES concursos(id)"))
+            await db.execute(
+                text("UPDATE error_entries SET concurso_id = :cid WHERE concurso_id IS NULL"),
+                {"cid": default_concurso_id},
+            )
+            await db.execute(text("CREATE INDEX IF NOT EXISTS ix_error_entries_concurso_id ON error_entries(concurso_id)"))
+
+        # mock_exams.concurso_id
+        if await _table_exists(db, "mock_exams") and not await _column_exists(db, "mock_exams", "concurso_id"):
+            await db.execute(text("ALTER TABLE mock_exams ADD COLUMN concurso_id INTEGER REFERENCES concursos(id)"))
+            await db.execute(
+                text("UPDATE mock_exams SET concurso_id = :cid WHERE concurso_id IS NULL"),
+                {"cid": default_concurso_id},
+            )
+            await db.execute(text("CREATE INDEX IF NOT EXISTS ix_mock_exams_concurso_id ON mock_exams(concurso_id)"))
 
     await db.commit()

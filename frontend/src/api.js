@@ -64,3 +64,8 @@ export const getAudio = (dayId) => api.get(`/days/${dayId}/audio`)
 export const generateAudio = (dayId) => api.post(`/days/${dayId}/audio/generate`)
 export const getPodcastFeed = () => api.get('/podcast/me')
 export const regeneratePodcastToken = () => api.post('/podcast/regenerate-token')
+
+// Concursos
+export const getConcursos = () => api.get('/concursos')
+export const getConcursosPublicos = () => api.get('/concursos/disponiveis')
+export const setConcursoAtual = (id) => api.put(`/me/concurso-atual/${id}`)

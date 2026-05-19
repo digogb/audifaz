@@ -3,7 +3,7 @@ from datetime import date
 from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from .models import Phase, Week, StudyDay, Topic
+from .models import Phase, Week, StudyDay, Topic, Concurso
 
 
 def _parse_plano():
@@ -124,12 +124,30 @@ async def seed_if_needed(db: AsyncSession):
     if result.scalars().first():
         return  # already seeded
 
+    # Garante concurso default (migrate normalmente já cria, mas defendemos contra DB virgem)
+    concurso_result = await db.execute(select(Concurso).where(Concurso.slug == "sefaz-ce-2026"))
+    concurso = concurso_result.scalar_one_or_none()
+    if not concurso:
+        concurso = Concurso(
+            slug="sefaz-ce-2026",
+            nome="SEFAZ-CE 2026 — Auditor Fiscal TI",
+            banca="FCC",
+            orgao="SEFAZ-CE",
+            cargo="B02 Auditor-Fiscal TI",
+            data_prova=date(2026, 8, 1),
+            descricao="Concurso para Auditor Fiscal de TI da Secretaria da Fazenda do Ceará",
+            ativo=True,
+            publico=True,
+        )
+        db.add(concurso)
+        await db.flush()
+
     phases_data, weeks_data, days_data = _parse_plano()
 
     # Create phases
     phase_map = {}
     for p in phases_data:
-        phase = Phase(numero=p["numero"], nome=p["nome"])
+        phase = Phase(concurso_id=concurso.id, numero=p["numero"], nome=p["nome"])
         db.add(phase)
         await db.flush()
         phase_map[p["numero"]] = phase
