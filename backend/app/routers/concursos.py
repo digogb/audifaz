@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, get_admin_user
 from ..db import get_db
-from ..models import Concurso, UserConcurso, User
+from ..models import Concurso, UserConcurso, User, BancaExample
 from ..schemas import ConcursoOut
 from ..services.plan_importer import import_plan, parse_plan, detect_format
 
@@ -25,6 +25,31 @@ class ConcursoCreate(BaseModel):
     edital_url: Optional[str] = None
     prompt_extra: Optional[str] = None
     publico: bool = False
+
+
+class BancaExampleIn(BaseModel):
+    banca: str
+    fonte: str
+    ano: Optional[int] = None
+    disciplina: str
+    enunciado: str
+    alternativas: dict
+    gabarito: str
+    comentario: Optional[str] = None
+
+
+class BancaExampleOut(BaseModel):
+    model_config = {"from_attributes": True}
+    id: int
+    banca: str
+    fonte: str
+    ano: Optional[int] = None
+    disciplina: str
+    enunciado: str
+    alternativas: dict
+    gabarito: str
+    comentario: Optional[str] = None
+    ativo: bool
 
 
 @router.get("/concursos", response_model=List[ConcursoOut])
@@ -136,6 +161,45 @@ async def admin_import_plano(
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return {"concurso_id": concurso_id, **counts}
+
+
+@router.get("/admin/banca-examples", response_model=List[BancaExampleOut])
+async def admin_list_examples(
+    banca: Optional[str] = None,
+    _: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    q = select(BancaExample).order_by(BancaExample.banca, BancaExample.id)
+    if banca:
+        q = q.where(BancaExample.banca == banca)
+    rows = (await db.execute(q)).scalars().all()
+    return rows
+
+
+@router.post("/admin/banca-examples", response_model=BancaExampleOut, status_code=201)
+async def admin_create_example(
+    body: BancaExampleIn,
+    _: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ex = BancaExample(**body.model_dump(), ativo=True)
+    db.add(ex)
+    await db.commit()
+    await db.refresh(ex)
+    return ex
+
+
+@router.delete("/admin/banca-examples/{example_id}", status_code=204)
+async def admin_delete_example(
+    example_id: int,
+    _: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    ex = await db.get(BancaExample, example_id)
+    if not ex:
+        raise HTTPException(404)
+    await db.delete(ex)
+    await db.commit()
 
 
 @router.put("/me/concurso-atual/{concurso_id}", response_model=ConcursoOut)

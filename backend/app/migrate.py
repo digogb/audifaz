@@ -1,5 +1,7 @@
 """Idempotent SQLite migrations for adding multi-user columns."""
+import json
 import os
+from pathlib import Path
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -254,4 +256,39 @@ async def migrate(db: AsyncSession):
             )
             await db.execute(text("CREATE INDEX IF NOT EXISTS ix_mock_exams_concurso_id ON mock_exams(concurso_id)"))
 
+    # Seed inicial de banca_examples a partir do JSON antigo (uma vez só)
+    if await _table_exists(db, "banca_examples"):
+        count = (await db.execute(text("SELECT COUNT(*) FROM banca_examples"))).scalar()
+        if count == 0:
+            await _seed_banca_examples_from_json(db)
+
     await db.commit()
+
+
+async def _seed_banca_examples_from_json(db: AsyncSession):
+    """Carrega backend/app/fcc_examples.json para a tabela banca_examples."""
+    json_path = Path(__file__).parent / "fcc_examples.json"
+    if not json_path.exists():
+        return
+    try:
+        data = json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    for q in data.get("questoes", []):
+        if not q.get("enunciado") or not q.get("gabarito"):
+            continue
+        await db.execute(
+            text("""
+                INSERT INTO banca_examples
+                    (banca, fonte, ano, disciplina, enunciado, alternativas, gabarito, comentario, ativo, criado_em)
+                VALUES ('FCC', :fonte, :ano, :disciplina, :enunciado, :alternativas, :gabarito, NULL, 1, datetime('now'))
+            """),
+            {
+                "fonte": q.get("prova", "FCC"),
+                "ano": q.get("ano"),
+                "disciplina": q.get("disciplina", ""),
+                "enunciado": q.get("enunciado", ""),
+                "alternativas": json.dumps(q.get("alternativas", {}), ensure_ascii=False),
+                "gabarito": q.get("gabarito", "A"),
+            },
+        )

@@ -1,6 +1,8 @@
 """Cliente do Claude — gera transcript estruturado Ana/Lucas a partir de markdown."""
 import logging
 import os
+from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 from anthropic import AsyncAnthropic, APIError
@@ -11,7 +13,18 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
 MAX_TOKENS = int(os.environ.get("CLAUDE_MAX_TOKENS", "8000"))
 
-SYSTEM_PROMPT = """Você é um roteirista de podcast educativo em português brasileiro. Recebe material de estudo e produz um diálogo NATURAL entre dois locutores: **Ana** (feminina) e **Lucas** (masculino). O diálogo será lido por TTS — então o roteiro precisa SOAR como conversa real, não como leitura de texto.
+
+@dataclass
+class ConcursoContext:
+    nome: str
+    banca: str
+    orgao: str
+    cargo: str
+    data_prova: Optional[date] = None
+    prompt_extra: Optional[str] = None
+
+
+_BASE_RULES = """Você é um roteirista de podcast educativo em português brasileiro. Recebe material de estudo e produz um diálogo NATURAL entre dois locutores: **Ana** (feminina) e **Lucas** (masculino). O diálogo será lido por TTS — então o roteiro precisa SOAR como conversa real, não como leitura de texto.
 
 # Regras de conteúdo (absolutas)
 
@@ -33,30 +46,28 @@ Como o áudio é sintético, frases compridas e tom uniforme ficam ROBÓTICAS. P
 11. **Reações genuínas**: quando Lucas fala algo importante, Ana reage ANTES de continuar ("Hm, interessante.", "Ah, essa é boa.", "Espera, deixa eu repetir isso."). E vice-versa.
 12. **Perguntas retóricas**: a cada ~3 turnos, um deles puxa o próximo conceito com pergunta ("E qual a diferença disso pro próximo?", "Mas por que isso cai tanto?", "Então e o caso de...?").
 13. **Pontuação para prosódia**: use vírgulas para respiração curta, pontos para pausa, reticências... para suspense ou pensamento, exclamações com moderação. Travessões podem ajudar em apostos.
-14. **Siglas técnicas**: ao mencionar uma sigla pela primeira vez, soletre-a ("COBIT — cê-ó-bê-i-tê") OU escreva expandido com a sigla depois ("Control Objectives for Information Technologies — o COBIT"). Códigos como "APO12" leia como "A-P-O doze" se mencionado.
+14. **Siglas técnicas**: ao mencionar uma sigla pela primeira vez, soletre-a ("COBIT — cê-ó-bê-i-tê") OU escreva expandido com a sigla depois ("Control Objectives for Information Technologies — o COBIT"). Códigos como "APO12" leia como "A-P-O doze" se mencionado."""
 
-# Contexto do ouvinte
 
-Está estudando para o concurso de **Auditor Fiscal de TI da SEFAZ-CE 2026 (banca FCC)**. O material pode cobrir:
-- TI: frameworks (COBIT, ITIL, ISO 27001/27002/27005), engenharia de software (GoF, microsserviços, DevOps, DevSecOps), dados (NoSQL, ETL/ELT, Kafka, Data Lake/Warehouse/Mesh), cloud (AWS/Azure/GCP, Kubernetes), segurança (criptografia, PKI, OAuth/OIDC, OWASP), infraestrutura (redes, virtualização, storage), IA/ML/MLOps
-- Direito Tributário (CTN, LC 87/123/116, Reforma Tributária IBS/CBS), Constitucional, Administrativo (Lei 14.133, 8.429, 12.527), Civil, Penal, Financeiro (LRF, Lei 4.320), LGPD
-- Contabilidade Geral e Pública (MCASP, NBC TSP, NBC TA), Auditoria
-- Economia (micro/macro), Matemática Financeira, Estatística, Análise Combinatória, Raciocínio Lógico
-- Língua Portuguesa, Redação Oficial
-- Legislação Estadual CE (ICMS, ITCD, IPVA, FECOP)
-
-Adapte o tom: técnico em TI, normativo em direito/contabilidade, prático em matemática/português.
-
-# Pegadinhas FCC
+_PEGADINHAS = """# Pegadinhas da banca
 
 Destaque pegadinhas típicas quando identificar uma no material:
 - Troca de versões de framework (COBIT 5 vs 2019, ITIL v3 vs v4)
 - Datas/números de leis trocados, alíquotas, prazos, exceções
 - Palavras absolutas ("sempre", "nunca") versus relativas ("pode", "deve")
-- Conceitos parecidos confundidos (OAuth vs OIDC, RPO vs RTO, DW vs Data Lake, ICMS vs ISS)
-- Listas com pegadinha (modalidades de extinção do crédito tributário, controles ISO 27002, princípios LIMPE)
+- Conceitos parecidos confundidos (OAuth vs OIDC, RPO vs RTO, DW vs Data Lake)
+- Listas com pegadinha (modalidades de extinção do crédito tributário, controles ISO 27002)
 
 Use SEMPRE a ferramenta `submit_transcript` para entregar o diálogo final."""
+
+
+def _build_system_prompt(c: ConcursoContext) -> str:
+    data_str = c.data_prova.isoformat() if c.data_prova else "a definir"
+    extra = f"\n\nObservação específica: {c.prompt_extra.strip()}" if c.prompt_extra else ""
+    contexto = f"""# Contexto do ouvinte
+
+Está estudando para o concurso **{c.nome}** ({c.orgao}, cargo {c.cargo}, banca {c.banca}, prova {data_str}). O material pode cobrir tópicos típicos da área. Adapte o tom: técnico em TI, normativo em direito/contabilidade, prático em matemática/português.{extra}"""
+    return f"{_BASE_RULES}\n\n{contexto}\n\n{_PEGADINHAS}"
 
 
 TRANSCRIPT_TOOL = {
@@ -97,12 +108,6 @@ class TranscriptError(RuntimeError):
 
 
 def _suggest_turn_count(content_chars: int) -> int:
-    """Range de turnos sugerido pelo tamanho do material.
-
-    Turnos curtos (1-3 frases cada) soam mais naturais no TTS. Por isso o
-    divisor é baixo: queremos MAIS turnos, cada um mais curto, em vez de
-    poucos turnos longos.
-    """
     return max(20, min(60, content_chars // 300))
 
 
@@ -121,14 +126,25 @@ def _validate_turns(turns: list[dict]) -> list[dict]:
     return cleaned
 
 
+# Fallback usado quando não chega um Concurso (rota de compat).
+_DEFAULT_CONCURSO = ConcursoContext(
+    nome="Concurso público",
+    banca="FCC",
+    orgao="—",
+    cargo="—",
+)
+
+
 async def generate_transcript(
     content_md: str,
     instrucoes: Optional[str] = None,
+    concurso: Optional[ConcursoContext] = None,
 ) -> list[dict]:
     """Chama Claude e retorna lista [{speaker, text}, ...] validada."""
     if not ANTHROPIC_API_KEY:
         raise TranscriptError("ANTHROPIC_API_KEY não configurado")
 
+    ctx = concurso or _DEFAULT_CONCURSO
     target_turns = _suggest_turn_count(len(content_md))
     user_msg = (
         f"[Material do dia]\n{content_md}\n\n"
@@ -146,7 +162,7 @@ async def generate_transcript(
         resp = await client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=_build_system_prompt(ctx),
             tools=[TRANSCRIPT_TOOL],
             tool_choice={"type": "tool", "name": "submit_transcript"},
             messages=[{"role": "user", "content": user_msg}],

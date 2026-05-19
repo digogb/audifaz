@@ -199,6 +199,22 @@ class MockExamResult(Base):
     exam: Mapped["MockExam"] = relationship(back_populates="results")
 
 
+class BancaExample(Base):
+    """Questão real de prova anterior, usada para calibrar estilo da banca."""
+    __tablename__ = "banca_examples"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    banca: Mapped[str] = mapped_column(String(50), index=True)
+    fonte: Mapped[str] = mapped_column(String(120))  # ex: "SEFAZ-BA 2019"
+    ano: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    disciplina: Mapped[str] = mapped_column(String(100))
+    enunciado: Mapped[str] = mapped_column(String)
+    alternativas: Mapped[dict] = mapped_column(JSON)
+    gabarito: Mapped[str] = mapped_column(String(1))
+    comentario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class MaterialAudio(Base):
     __tablename__ = "material_audios"
     id: Mapped[int] = mapped_column(primary_key=True)

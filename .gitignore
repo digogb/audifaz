@@ -10,3 +10,4 @@ dist/
 data/
 *.egg-info/
 .pytest_cache/
+*:Zone.Identifier

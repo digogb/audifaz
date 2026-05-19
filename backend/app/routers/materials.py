@@ -4,10 +4,10 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
-from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso
+from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso, BancaExample
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
-from ..claude_client import _calc_cost, _calc_cache_ratio
+from ..claude_client import _calc_cost, _calc_cache_ratio, ConcursoContext
 from ..auth import get_current_user, get_admin_user, get_current_concurso
 
 router = APIRouter(prefix="/api/days", tags=["materials"])
@@ -23,6 +23,44 @@ async def _ensure_day_in_concurso(db: AsyncSession, day_id: int, concurso_id: in
     )
     if not result.scalar_one_or_none():
         raise HTTPException(404, "Dia não encontrado")
+
+
+def _to_ctx(c: Concurso) -> ConcursoContext:
+    return ConcursoContext(
+        nome=c.nome, banca=c.banca, orgao=c.orgao, cargo=c.cargo,
+        data_prova=c.data_prova, prompt_extra=c.prompt_extra,
+    )
+
+
+async def _load_examples(db: AsyncSession, banca: str, limit: int = 12) -> list[dict]:
+    rows = (await db.execute(
+        select(BancaExample)
+        .where(BancaExample.banca == banca, BancaExample.ativo == True)
+        .order_by(BancaExample.id)
+        .limit(limit)
+    )).scalars().all()
+    return [
+        {
+            "fonte": r.fonte,
+            "ano": r.ano,
+            "disciplina": r.disciplina,
+            "enunciado": r.enunciado,
+            "alternativas": r.alternativas,
+            "gabarito": r.gabarito,
+        }
+        for r in rows
+    ]
+
+
+async def _concurso_for_day(db: AsyncSession, day_id: int) -> Concurso | None:
+    """Resolve o Concurso responsável por um StudyDay (via Phase)."""
+    return (await db.execute(
+        select(Concurso)
+        .join(Phase, Phase.concurso_id == Concurso.id)
+        .join(Week, Week.phase_id == Phase.id)
+        .join(StudyDay, StudyDay.week_id == Week.id)
+        .where(StudyDay.id == day_id)
+    )).scalar_one_or_none()
 
 
 @router.get("/{day_id}/material", response_model=StudyMaterialOut)
@@ -115,9 +153,15 @@ async def _enqueue_audio(db, material_id: int):
         db.add(MaterialAudio(study_material_id=material_id, status="pendente"))
 
 
-async def _run_generation_bg(material_id: int, topics: list[str], model: str):
+async def _run_generation_bg(material_id: int, topics: list[str], model: str, concurso_id: int):
     try:
-        content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
+        async with AsyncSessionLocal() as db_pre:
+            concurso = await db_pre.get(Concurso, concurso_id)
+            if not concurso:
+                raise RuntimeError(f"concurso {concurso_id} sumiu")
+            examples = await _load_examples(db_pre, concurso.banca)
+            ctx = _to_ctx(concurso)
+        content_md, questions_data, usage_dict = await claude_client.generate_material(topics, ctx, examples, model)
         validation_flags = await claude_client.validate_material(content_md, questions_data)
 
         async with AsyncSessionLocal() as db:
@@ -235,7 +279,7 @@ async def generate_material(
     }
 
     await db.commit()
-    background_tasks.add_task(_run_generation_bg, material_id, topics, model)
+    background_tasks.add_task(_run_generation_bg, material_id, topics, model, concurso.id)
     return snapshot
 
 
@@ -259,8 +303,13 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
             return
 
         topics = [t.descricao for t in day.topics]
+        concurso = await _concurso_for_day(db, day_id)
+        if not concurso:
+            return
+        examples = await _load_examples(db, concurso.banca)
+        ctx = _to_ctx(concurso)
 
-    content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
+    content_md, questions_data, usage_dict = await claude_client.generate_material(topics, ctx, examples, model)
     validation_flags = await claude_client.validate_material(content_md, questions_data)
 
     async with AsyncSessionLocal() as db:

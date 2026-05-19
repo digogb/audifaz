@@ -133,14 +133,23 @@ async def _process(audio_id: int):
         content_md = audio.material.conteudo_md
         instrucoes = audio.instrucoes
         material_id = audio.material.id
+        concurso = await get_concurso_for_material(db, material_id)
+        ctx = ConcursoContext(
+            nome=concurso.nome,
+            banca=concurso.banca,
+            orgao=concurso.orgao,
+            cargo=concurso.cargo,
+            data_prova=concurso.data_prova,
+            prompt_extra=concurso.prompt_extra,
+        ) if concurso else None
 
     logger.info(
-        "processing audio id=%s material=%s (%d chars)",
-        audio_id, material_id, len(content_md),
+        "processing audio id=%s material=%s concurso=%s (%d chars)",
+        audio_id, material_id, (concurso.slug if concurso else "?"), len(content_md),
     )
 
     try:
-        transcript = await generate_transcript(content_md, instrucoes)
+        transcript = await generate_transcript(content_md, instrucoes, concurso=ctx)
         logger.info("audio id=%s transcript: %d turnos", audio_id, len(transcript))
 
         def _log_progress(done: int, total: int, size: int):
