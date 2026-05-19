@@ -74,6 +74,53 @@ A unidade comercial é **assinatura por concurso** (não por usuário global). U
 
 ---
 
+## Fase 2.5 — Theming por concurso (white-label visual) `[3-4 dias]`
+
+**Objetivo:** cada concurso tem sua própria identidade visual. SEFAZ-CE mantém o dark glassmorphism atual ("audifaz"); TJCE usa o **LexLumina Design System** (verde institucional `#1F4D3A` + dourado `#C5A880`, light theme, tipografia Merriweather/Inter, estética jurídica premium — veja `LexLumina_Design_System.md`). Concursos futuros podem reusar temas existentes ou ganhar novos.
+
+**Por que agora (e não depois):** o TJCE já está no sistema. Toda nova feature de Fase 3+ vai consumir componentes — se eles forem hard-coded no estilo audifaz, refatorar depois é dor exponencial. Refatorar agora, com 4 páginas, é manejável.
+
+**Decisões de arquitetura:**
+- **Não usar dois builds.** Um único bundle Vite, troca de tema em runtime via CSS variables no `:root`.
+- **Theme picker é dado, não código.** Cada tema é um objeto `{slug, name, mode (dark/light), cssVars: {...}, fonts: [...]}`. Adicionar tema = adicionar entrada no registry, não tocar componentes.
+- **Tailwind continua,** mas as cores semânticas (`text-primary`, `bg-surface`, `border-default`) viram CSS variables em vez de valores fixos. Cores literais (`text-zinc-500`) ficam só para casos genuinamente neutros.
+- **Tipografia + modo (light/dark) também são parte do tema** — não dá pra fingir que só muda cor. LexLumina é light com serifas; audifaz é dark com sans. Componentes precisam respeitar `mode`.
+
+**Backend:**
+- `Concurso.theme_slug` (string, default `"audifaz"`)
+- Migration: `tjce-2026.theme_slug = "lexlumina"`; `sefaz-ce-2026.theme_slug = "audifaz"`
+- `ConcursoOut.theme_slug` exposto na API
+
+**Frontend:**
+- `frontend/src/themes/index.js` — registry com `audifaz` e `lexlumina`:
+  ```js
+  {
+    audifaz: { mode: 'dark', vars: {...}, fontHeading: 'system-ui', fontBody: 'system-ui' },
+    lexlumina: { mode: 'light', vars: {...}, fontHeading: 'Merriweather', fontBody: 'Inter' },
+  }
+  ```
+- `ThemeProvider` que aplica `data-theme={slug}` em `<html>` e injeta `<link>` das Google Fonts do tema
+- `tailwind.config.js`: cores semânticas via `var(--color-primary)` etc.; suporte a `darkMode: ['selector', '[data-theme-mode="dark"]']`
+- Refatorar **4 telas heavy-hitter:** Layout, Today, Config, Login. Outras (Errors, Progress, Mocks, AudioStatus) só fazem swap de classes quando tiver tempo — não bloqueia.
+- `index.html`: preconnect para fonts.googleapis.com
+
+**Critério de aceite:**
+- Trocar concurso no dropdown → tema muda visivelmente (dark↔light, cores, fonts) sem reload duro
+- Logar como user só do TJCE → app abre direto em LexLumina, sem flash de tema errado
+- Lighthouse contrast OK em ambos os temas (LexLumina light precisa de cuidado com texto cinza claro)
+
+**Riscos:**
+- Salto dark→light é forte; componentes com `bg-zinc-900/glass` simplesmente não funcionam no light. Vai ter feiura intermediária enquanto a refatoração avança — fazer em PR fechado evita commits feios em main.
+- Google Fonts adicionam ~80kb. Não-bloqueante; preload Merriweather só quando tema lex ativo.
+- Login não tem concurso ainda (user pré-login) — mostrar tema neutro ou o do último login (cache em localStorage).
+
+**O que NÃO fazer:**
+- Theme builder visual no admin. Custo enorme, valor baixo até existirem 5+ concursos. Por enquanto edição é via código.
+- Suporte a tema custom por usuário. Tema pertence ao concurso, não ao user.
+- Animação na transição. Trocar concurso já é um gesto deliberado; reload é OK.
+
+---
+
 ## Fase 3 — Geração de conteúdo scoped por banca/concurso `[1-2 dias]`
 
 **Objetivo:** o material gerado leva em conta banca e perfil do concurso. FCC ≠ Cebraspe; TJCE ≠ SEFAZ.
@@ -217,12 +264,13 @@ A unidade comercial é **assinatura por concurso** (não por usuário global). U
 | Semana | Fases | Resultado |
 |---|---|---|
 | 1 | Fase 1 + Fase 2 | TJCE importado e navegável em paralelo ao SEFAZ |
-| 2 | Fase 3 + Fase 4 | Conteúdo do TJCE com estilo FCC + dashboard de bloco |
-| 3 | Fase 5 | Redação funcionando, você corrige suas próprias para validar |
-| 4 | Fase 6 (parte 1) | Signup público + Pix manual; convidar 3-5 amigos beta |
-| 5 | Fase 6 (parte 2) + Fase 7 + Fase 8 | Stripe, LGPD, landing, lançamento |
+| 2 | Fase 2.5 | TJCE com identidade LexLumina; SEFAZ mantém audifaz dark |
+| 3 | Fase 3 + Fase 4 | Conteúdo do TJCE com estilo FCC + dashboard de bloco |
+| 4 | Fase 5 | Redação funcionando, você corrige suas próprias para validar |
+| 5 | Fase 6 (parte 1) | Signup público + Pix manual; convidar 3-5 amigos beta |
+| 6 | Fase 6 (parte 2) + Fase 7 + Fase 8 | Stripe, LGPD, landing, lançamento |
 
-Realista (com job e estudo paralelo): **8-10 semanas**.
+Realista (com job e estudo paralelo): **9-11 semanas**.
 
 ---
 
