@@ -31,6 +31,7 @@ class Concurso(Base):
     descricao: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
     edital_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     prompt_extra: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    theme_slug: Mapped[str] = mapped_column(String(40), default="audifaz")
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     publico: Mapped[bool] = mapped_column(Boolean, default=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

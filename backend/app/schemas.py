@@ -198,5 +198,6 @@ class ConcursoOut(BaseModel):
     data_prova: Optional[date] = None
     descricao: Optional[str] = None
     edital_url: Optional[str] = None
+    theme_slug: str = "audifaz"
     ativo: bool
     atual: bool = False

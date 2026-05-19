@@ -239,6 +239,12 @@ async def migrate(db: AsyncSession):
             )
             await db.execute(text("CREATE INDEX IF NOT EXISTS ix_error_entries_concurso_id ON error_entries(concurso_id)"))
 
+        # concursos.theme_slug
+        if not await _column_exists(db, "concursos", "theme_slug"):
+            await db.execute(text("ALTER TABLE concursos ADD COLUMN theme_slug VARCHAR(40) NOT NULL DEFAULT 'audifaz'"))
+            await db.execute(text("UPDATE concursos SET theme_slug = 'audifaz' WHERE slug = 'sefaz-ce-2026'"))
+            await db.execute(text("UPDATE concursos SET theme_slug = 'lexlumina' WHERE slug = 'tjce-2026'"))
+
         # mock_exams.concurso_id
         if await _table_exists(db, "mock_exams") and not await _column_exists(db, "mock_exams", "concurso_id"):
             await db.execute(text("ALTER TABLE mock_exams ADD COLUMN concurso_id INTEGER REFERENCES concursos(id)"))

@@ -4,19 +4,36 @@ export default {
   theme: {
     extend: {
       colors: {
-        'bg-base': '#0B1527',
-        'bg-mid': '#112040',
-        'bg-surface': '#1A2D50',
-        'bg-terminal': '#090F1C',
-        'accent-blue': '#2D72D9',
-        'text-blue': '#5B9EF4',
-        'accent-orange': '#D4845A',
-        'terminal-orange': '#E8865A',
-        'text-primary': '#FFFFFF',
-        'text-muted': '#A8B5CC',
+        // ---- semantic tokens (preferred) ----
+        bg: 'var(--color-bg)',
+        'bg-mid': 'var(--color-bg-mid)',
+        'bg-surface': 'var(--color-bg-surface)',
+        'bg-terminal': 'var(--color-bg-terminal)',
+        primary: 'var(--color-text)',
+        muted: 'var(--color-text-muted)',
+        subtle: 'var(--color-text-subtle)',
+        accent: 'var(--color-accent)',
+        'accent-hover': 'var(--color-accent-hover)',
+        'accent-text': 'var(--color-accent-text)',
+        'accent-soft': 'var(--color-accent-soft)',
+        secondary: 'var(--color-secondary)',
+        'secondary-hover': 'var(--color-secondary-hover)',
+        danger: 'var(--color-danger)',
+        success: 'var(--color-success)',
+
+        // ---- legacy aliases (compat com classes pré-tematizadas) ----
+        // todas apontam pros tokens semânticos, então mudam com o tema
+        'text-primary': 'var(--color-text)',
+        'text-muted': 'var(--color-text-muted)',
+        'text-blue': 'var(--color-accent-text)',
+        'accent-blue': 'var(--color-accent)',
+        'accent-orange': 'var(--color-danger)',
+        'terminal-orange': 'var(--color-danger)',
+        'bg-base': 'var(--color-bg)',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-body)', 'system-ui', 'sans-serif'],
+        heading: ['var(--font-heading)', 'system-ui', 'sans-serif'],
         mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
       },
       borderRadius: {
@@ -27,9 +44,6 @@ export default {
       },
       backdropBlur: {
         glass: '8px',
-      },
-      boxShadow: {
-        'glass-glow': '0 0 0 0.5px rgba(255,255,255,0.10)',
       },
     },
   },

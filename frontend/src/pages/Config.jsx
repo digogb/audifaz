@@ -4,19 +4,12 @@ import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { useConcurso } from '../contexts/ConcursoContext'
 
-const glass = {
-  background: 'rgba(255,255,255,0.05)',
-  border: '0.5px solid rgba(255,255,255,0.10)',
-  backdropFilter: 'blur(12px)',
-  WebkitBackdropFilter: 'blur(12px)',
-}
-
 function GlassCard({ children, className = '' }) {
-  return <div className={`rounded-container ${className}`} style={glass}>{children}</div>
+  return <div className={`surface-card ${className}`}>{children}</div>
 }
 
 function SectionLabel({ children }) {
-  return <p className="text-[11px] font-medium text-white/40 uppercase tracking-widest mb-3">{children}</p>
+  return <p className="text-[11px] font-medium text-subtle uppercase tracking-widest mb-3">{children}</p>
 }
 
 export default function Config() {
@@ -74,27 +67,28 @@ export default function Config() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">Configurações</h1>
-        <p className="text-[13px] text-white/40 mt-1">Preferências da sua conta</p>
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-primary">Configurações</h1>
+        <p className="text-[13px] text-subtle mt-1">Preferências da sua conta</p>
       </div>
 
       <GlassCard className="p-5 sm:p-6 space-y-4">
         <div className="flex items-center gap-2.5">
-          <Headphones size={18} strokeWidth={1.75} className="text-text-blue" />
-          <h2 className="text-base font-bold text-white">Podcast diário</h2>
+          <Headphones size={18} strokeWidth={1.75} className="text-accent-text" />
+          <h2 className="font-heading text-base font-bold text-primary">Podcast diário</h2>
         </div>
-        <p className="text-[13px] text-white/60 leading-relaxed">
+        <p className="text-[13px] text-muted leading-relaxed">
           Assine este feed RSS no seu app de podcast favorito. Episódios novos aparecem
           automaticamente todo dia depois que o material é gerado.
         </p>
 
-        {loading && <p className="text-[12px] text-white/40 animate-pulse">Carregando...</p>}
+        {loading && <p className="text-[12px] text-subtle animate-pulse">Carregando...</p>}
 
         {!loading && !feed && (
           <button
             onClick={handleRegenerate}
             disabled={regenerating}
-            className="flex items-center gap-2 px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-50 text-white text-[13px] font-semibold"
+            className="flex items-center gap-2 px-4 py-2 rounded-btn bg-accent hover:bg-accent-hover disabled:opacity-50 text-[13px] font-semibold"
+            style={{ color: 'var(--color-bg)' }}
           >
             {regenerating ? <RefreshCw size={13} className="animate-spin" /> : <RefreshCw size={13} />}
             Gerar URL do feed
@@ -110,12 +104,12 @@ export default function Config() {
                 readOnly
                 value={feed.feed_url}
                 onClick={(e) => e.target.select()}
-                className="flex-1 rounded-btn px-3 py-2 text-[12px] text-white/85 font-mono focus:outline-none focus:border-accent-blue"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+                className="surface-input flex-1 rounded-btn px-3 py-2 text-[12px] text-primary font-mono focus:outline-none focus:border-accent"
               />
               <button
                 onClick={handleCopy}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 text-white text-[12px] font-semibold transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-btn bg-accent hover:bg-accent-hover text-[12px] font-semibold transition-colors"
+                style={{ color: 'var(--color-bg)' }}
               >
                 {copied ? <Check size={12} /> : <Copy size={12} />}
                 {copied ? 'Copiado' : 'Copiar'}
@@ -124,20 +118,20 @@ export default function Config() {
 
             {isRelativeUrl && (
               <div className="rounded-btn px-3 py-2 flex items-start gap-2"
-                   style={{ background: 'rgba(212,132,90,0.10)', border: '0.5px solid rgba(212,132,90,0.35)' }}>
-                <AlertTriangle size={12} className="text-accent-orange shrink-0 mt-0.5" />
-                <p className="text-[11px] text-accent-orange">
+                   style={{ background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-danger) 35%, transparent)' }}>
+                <AlertTriangle size={12} className="text-danger shrink-0 mt-0.5" />
+                <p className="text-[11px] text-danger">
                   URL relativa — apps de podcast precisam de URL absoluta. Defina <code className="font-mono">PUBLIC_BASE_URL</code> no docker-compose e reinicie.
                 </p>
               </div>
             )}
 
             <SectionLabel>Como assinar</SectionLabel>
-            <ol className="space-y-1.5 text-[12px] text-white/60 list-decimal list-inside">
+            <ol className="space-y-1.5 text-[12px] text-muted list-decimal list-inside">
               <li>Copie a URL acima</li>
-              <li><strong className="text-white/80">Pocket Casts / Overcast / Castro:</strong> Buscar → colar URL</li>
-              <li><strong className="text-white/80">Apple Podcasts:</strong> Biblioteca → ··· → Seguir um programa por URL</li>
-              <li><strong className="text-white/80">Spotify:</strong> não suporta RSS privado — use outro app</li>
+              <li><strong className="text-primary">Pocket Casts / Overcast / Castro:</strong> Buscar → colar URL</li>
+              <li><strong className="text-primary">Apple Podcasts:</strong> Biblioteca → ··· → Seguir um programa por URL</li>
+              <li><strong className="text-primary">Spotify:</strong> não suporta RSS privado — use outro app</li>
             </ol>
 
             <div className="pt-2 flex flex-wrap items-center gap-3">
@@ -145,15 +139,14 @@ export default function Config() {
                 href={feed.feed_url}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 text-[12px] text-text-blue hover:underline"
+                className="flex items-center gap-1.5 text-[12px] text-accent-text hover:underline"
               >
                 <ExternalLink size={11} /> Abrir feed (XML)
               </a>
               <button
                 onClick={handleRegenerate}
                 disabled={regenerating}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-[12px] text-white/60 hover:text-accent-orange transition-colors"
-                style={{ border: '0.5px solid rgba(255,255,255,0.12)' }}
+                className="surface-input flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-[12px] text-muted hover:text-danger transition-colors"
               >
                 <RefreshCw size={11} className={regenerating ? 'animate-spin' : ''} />
                 Regenerar token
@@ -163,8 +156,8 @@ export default function Config() {
         )}
 
         {error && (
-          <div className="rounded-btn px-3 py-2" style={{ background: 'rgba(212,132,90,0.10)', border: '0.5px solid rgba(212,132,90,0.35)' }}>
-            <p className="text-[12px] text-accent-orange">{error}</p>
+          <div className="rounded-btn px-3 py-2" style={{ background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-danger) 35%, transparent)' }}>
+            <p className="text-[12px] text-danger">{error}</p>
           </div>
         )}
       </GlassCard>
@@ -222,9 +215,9 @@ function AdminPlanImport() {
     <GlassCard className="p-5 sm:p-6 space-y-4">
       <div className="flex items-center gap-2.5">
         <FileUp size={18} strokeWidth={1.75} className="text-text-blue" />
-        <h2 className="text-base font-bold text-white">Importar plano (admin)</h2>
+        <h2 className="text-base font-bold text-primary">Importar plano (admin)</h2>
       </div>
-      <p className="text-[13px] text-white/60 leading-relaxed">
+      <p className="text-[13px] text-muted leading-relaxed">
         Faz upload de um plano em markdown (formato SEFAZ ou TJCE) e substitui Phase/Week/StudyDay/Topic do concurso escolhido.
       </p>
 
@@ -232,8 +225,7 @@ function AdminPlanImport() {
       <select
         value={concursoId}
         onChange={(e) => { setConcursoId(e.target.value); setPreview(null); setResult(null) }}
-        className="w-full rounded-btn px-3 py-2 text-[13px] text-white/85 focus:outline-none focus:border-accent-blue"
-        style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+        className="surface-input w-full rounded-btn px-3 py-2 text-[13px] text-primary focus:outline-none focus:border-accent"
       >
         <option value="">— escolha —</option>
         {concursos.map(c => (
@@ -246,37 +238,37 @@ function AdminPlanImport() {
         type="file"
         accept=".md,text/markdown,text/plain"
         onChange={(e) => { setFile(e.target.files?.[0] || null); setPreview(null); setResult(null) }}
-        className="text-[12px] text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-btn file:border-0 file:bg-white/10 file:text-white/80 file:text-[12px] file:cursor-pointer hover:file:bg-white/15"
+        className="text-[12px] text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-btn file:border-0 file:bg-accent-soft file:text-primary file:text-[12px] file:cursor-pointer hover:file:bg-accent-soft"
       />
 
       <div className="flex flex-wrap gap-2 pt-2">
         <button
           onClick={handlePreview}
           disabled={!file || !concursoId || previewing}
-          className="px-4 py-2 rounded-btn bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white text-[12px] font-semibold transition-colors"
+          className="px-4 py-2 rounded-btn bg-accent-soft hover:bg-accent-hover disabled:opacity-40 text-primary text-[12px] font-semibold transition-colors"
         >
           {previewing ? 'Analisando...' : 'Pré-visualizar'}
         </button>
         <button
           onClick={handleImport}
           disabled={!file || !concursoId || importing}
-          className="px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-40 text-white text-[12px] font-semibold transition-colors"
+          className="px-4 py-2 rounded-btn bg-accent hover:bg-accent-hover disabled:opacity-40 text-primary text-[12px] font-semibold transition-colors"
         >
           {importing ? 'Importando...' : 'Importar (substitui plano atual)'}
         </button>
       </div>
 
       {preview && (
-        <div className="rounded-btn px-3 py-2 text-[12px] text-white/70" style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}>
+        <div className="rounded-btn px-3 py-2 text-[12px] text-muted">
           <p className="font-mono">
             formato: <span className="text-text-blue">{preview.formato}</span> ·
-            fases: <span className="text-white">{preview.fases}</span> ·
-            semanas: <span className="text-white">{preview.semanas}</span> ·
-            dias: <span className="text-white">{preview.dias}</span> ·
-            tópicos: <span className="text-white">{preview.topicos}</span>
+            fases: <span className="text-primary">{preview.fases}</span> ·
+            semanas: <span className="text-primary">{preview.semanas}</span> ·
+            dias: <span className="text-primary">{preview.dias}</span> ·
+            tópicos: <span className="text-primary">{preview.topicos}</span>
           </p>
           {preview.primeira_semana && (
-            <p className="text-[11px] text-white/45 mt-1">
+            <p className="text-[11px] text-subtle mt-1">
               1ª semana: S{preview.primeira_semana.numero} ({preview.primeira_semana.inicio} → {preview.primeira_semana.fim}) — {preview.primeira_semana.tema}
             </p>
           )}
@@ -284,7 +276,7 @@ function AdminPlanImport() {
       )}
 
       {result && (
-        <div className="rounded-btn px-3 py-2 text-[12px] text-white/80" style={{ background: 'rgba(122,199,127,0.10)', border: '0.5px solid rgba(122,199,127,0.35)' }}>
+        <div className="rounded-btn px-3 py-2 text-[12px] text-primary" style={{ background: 'rgba(122,199,127,0.10)', border: '0.5px solid rgba(122,199,127,0.35)' }}>
           ✓ Importado: {result.phases} fases · {result.weeks} semanas · {result.days} dias · {result.topics} tópicos
         </div>
       )}
@@ -334,8 +326,8 @@ function AdminConcursoCreate() {
     <GlassCard className="p-5 sm:p-6 space-y-3">
       <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2.5 w-full text-left">
         <Plus size={18} strokeWidth={1.75} className="text-text-blue" />
-        <h2 className="text-base font-bold text-white">Criar concurso (admin)</h2>
-        <span className="ml-auto text-[11px] text-white/40">{open ? 'fechar' : 'abrir'}</span>
+        <h2 className="text-base font-bold text-primary">Criar concurso (admin)</h2>
+        <span className="ml-auto text-[11px] text-subtle">{open ? 'fechar' : 'abrir'}</span>
       </button>
 
       {open && (
@@ -356,8 +348,7 @@ function AdminConcursoCreate() {
                 placeholder={label}
                 value={form[k]}
                 onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
-                className="rounded-btn px-3 py-2 text-[12px] text-white/85 focus:outline-none focus:border-accent-blue"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+                className="surface-input rounded-btn px-3 py-2 text-[12px] text-primary focus:outline-none focus:border-accent"
               />
             ))}
           </div>
@@ -366,17 +357,16 @@ function AdminConcursoCreate() {
             value={form.descricao}
             onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
             rows={2}
-            className="w-full rounded-btn px-3 py-2 text-[12px] text-white/85 focus:outline-none focus:border-accent-blue"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+            className="surface-input w-full rounded-btn px-3 py-2 text-[12px] text-primary focus:outline-none focus:border-accent"
           />
-          <label className="flex items-center gap-2 text-[12px] text-white/70">
+          <label className="flex items-center gap-2 text-[12px] text-muted">
             <input type="checkbox" checked={form.publico} onChange={e => setForm(f => ({ ...f, publico: e.target.checked }))} />
             Listar no catálogo público (/concursos/disponiveis)
           </label>
           <button
             type="submit"
             disabled={saving}
-            className="px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-40 text-white text-[12px] font-semibold"
+            className="px-4 py-2 rounded-btn bg-accent hover:bg-accent-hover disabled:opacity-40 text-primary text-[12px] font-semibold"
           >
             {saving ? 'Salvando...' : 'Criar concurso'}
           </button>

@@ -43,7 +43,7 @@ async def list_my_concursos(
         ConcursoOut(
             id=c.id, slug=c.slug, nome=c.nome, banca=c.banca, orgao=c.orgao,
             cargo=c.cargo, data_prova=c.data_prova, descricao=c.descricao,
-            edital_url=c.edital_url, ativo=c.ativo,
+            edital_url=c.edital_url, theme_slug=c.theme_slug, ativo=c.ativo,
             atual=(c.id == current_user.concurso_atual_id),
         )
         for c in concursos
@@ -79,7 +79,8 @@ async def admin_create_concurso(
     return ConcursoOut(
         id=concurso.id, slug=concurso.slug, nome=concurso.nome, banca=concurso.banca,
         orgao=concurso.orgao, cargo=concurso.cargo, data_prova=concurso.data_prova,
-        descricao=concurso.descricao, edital_url=concurso.edital_url, ativo=concurso.ativo,
+        descricao=concurso.descricao, edital_url=concurso.edital_url,
+        theme_slug=concurso.theme_slug, ativo=concurso.ativo,
         atual=False,
     )
 
@@ -164,6 +165,7 @@ async def set_concurso_atual(
     return ConcursoOut(
         id=concurso.id, slug=concurso.slug, nome=concurso.nome, banca=concurso.banca,
         orgao=concurso.orgao, cargo=concurso.cargo, data_prova=concurso.data_prova,
-        descricao=concurso.descricao, edital_url=concurso.edital_url, ativo=concurso.ativo,
+        descricao=concurso.descricao, edital_url=concurso.edital_url,
+        theme_slug=concurso.theme_slug, ativo=concurso.ativo,
         atual=True,
     )
