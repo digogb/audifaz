@@ -69,3 +69,16 @@ export const regeneratePodcastToken = () => api.post('/podcast/regenerate-token'
 export const getConcursos = () => api.get('/concursos')
 export const getConcursosPublicos = () => api.get('/concursos/disponiveis')
 export const setConcursoAtual = (id) => api.put(`/me/concurso-atual/${id}`)
+export const adminCreateConcurso = (data) => api.post('/admin/concursos', data)
+export const adminPreviewPlano = (concursoId, file) => {
+  const fd = new FormData(); fd.append('file', file)
+  return api.post(`/admin/concursos/${concursoId}/preview-plano`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+export const adminImportPlano = (concursoId, file) => {
+  const fd = new FormData(); fd.append('file', file)
+  return api.post(`/admin/concursos/${concursoId}/importar-plano`, fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}

@@ -199,6 +199,37 @@ async def migrate(db: AsyncSession):
                 {"cid": default_concurso_id},
             )
 
+        # study_days: drop UNIQUE constraint on `data` (single-tenant legacy).
+        # Com multi-concurso, datas se repetem entre concursos.
+        idx_list = await db.execute(text("PRAGMA index_list(study_days)"))
+        has_unique_on_data = False
+        for row in idx_list.all():
+            idx_name, is_unique = row[1], row[2]
+            if not is_unique:
+                continue
+            cols = await db.execute(text(f"PRAGMA index_info({idx_name})"))
+            if any(c[2] == "data" for c in cols.all()):
+                has_unique_on_data = True
+                break
+        if has_unique_on_data:
+            await db.execute(text("""
+                CREATE TABLE study_days_new (
+                    id INTEGER PRIMARY KEY,
+                    week_id INTEGER NOT NULL REFERENCES weeks(id),
+                    data DATE NOT NULL,
+                    tipo VARCHAR(20) NOT NULL DEFAULT 'util',
+                    status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+                    notas VARCHAR(2000)
+                )
+            """))
+            await db.execute(text("""
+                INSERT INTO study_days_new (id, week_id, data, tipo, status, notas)
+                SELECT id, week_id, data, tipo, status, notas FROM study_days
+            """))
+            await db.execute(text("DROP TABLE study_days"))
+            await db.execute(text("ALTER TABLE study_days_new RENAME TO study_days"))
+            await db.execute(text("CREATE INDEX ix_study_days_data ON study_days(data)"))
+
         # error_entries.concurso_id
         if await _table_exists(db, "error_entries") and not await _column_exists(db, "error_entries", "concurso_id"):
             await db.execute(text("ALTER TABLE error_entries ADD COLUMN concurso_id INTEGER REFERENCES concursos(id)"))

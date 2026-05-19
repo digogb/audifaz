@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Headphones, Copy, RefreshCw, Check, ExternalLink, AlertTriangle } from 'lucide-react'
+import { Headphones, Copy, RefreshCw, Check, ExternalLink, AlertTriangle, FileUp, Plus } from 'lucide-react'
 import * as api from '../api'
+import { useAuth } from '../contexts/AuthContext'
+import { useConcurso } from '../contexts/ConcursoContext'
 
 const glass = {
   background: 'rgba(255,255,255,0.05)',
@@ -166,6 +168,222 @@ export default function Config() {
           </div>
         )}
       </GlassCard>
+
+      <AdminPlanImport />
+      <AdminConcursoCreate />
     </div>
+  )
+}
+
+
+function AdminPlanImport() {
+  const { isAdmin } = useAuth()
+  const { concursos, refresh } = useConcurso()
+  const [concursoId, setConcursoId] = useState('')
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
+  const [result, setResult] = useState(null)
+  const [err, setErr] = useState(null)
+
+  if (!isAdmin) return null
+
+  async function handlePreview() {
+    if (!file || !concursoId) return
+    setErr(null); setResult(null); setPreviewing(true)
+    try {
+      const res = await api.adminPreviewPlano(concursoId, file)
+      setPreview(res.data)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Erro no parse')
+    } finally {
+      setPreviewing(false)
+    }
+  }
+
+  async function handleImport() {
+    if (!file || !concursoId) return
+    if (!confirm('Isso apaga todo o plano atual deste concurso (fases/semanas/dias/tópicos). Continuar?')) return
+    setErr(null); setImporting(true)
+    try {
+      const res = await api.adminImportPlano(concursoId, file)
+      setResult(res.data)
+      setPreview(null)
+      await refresh()
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Erro ao importar')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  return (
+    <GlassCard className="p-5 sm:p-6 space-y-4">
+      <div className="flex items-center gap-2.5">
+        <FileUp size={18} strokeWidth={1.75} className="text-text-blue" />
+        <h2 className="text-base font-bold text-white">Importar plano (admin)</h2>
+      </div>
+      <p className="text-[13px] text-white/60 leading-relaxed">
+        Faz upload de um plano em markdown (formato SEFAZ ou TJCE) e substitui Phase/Week/StudyDay/Topic do concurso escolhido.
+      </p>
+
+      <SectionLabel>Concurso destino</SectionLabel>
+      <select
+        value={concursoId}
+        onChange={(e) => { setConcursoId(e.target.value); setPreview(null); setResult(null) }}
+        className="w-full rounded-btn px-3 py-2 text-[13px] text-white/85 focus:outline-none focus:border-accent-blue"
+        style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+      >
+        <option value="">— escolha —</option>
+        {concursos.map(c => (
+          <option key={c.id} value={c.id} className="bg-zinc-900">{c.slug} · {c.nome}</option>
+        ))}
+      </select>
+
+      <SectionLabel>Arquivo .md</SectionLabel>
+      <input
+        type="file"
+        accept=".md,text/markdown,text/plain"
+        onChange={(e) => { setFile(e.target.files?.[0] || null); setPreview(null); setResult(null) }}
+        className="text-[12px] text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-btn file:border-0 file:bg-white/10 file:text-white/80 file:text-[12px] file:cursor-pointer hover:file:bg-white/15"
+      />
+
+      <div className="flex flex-wrap gap-2 pt-2">
+        <button
+          onClick={handlePreview}
+          disabled={!file || !concursoId || previewing}
+          className="px-4 py-2 rounded-btn bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white text-[12px] font-semibold transition-colors"
+        >
+          {previewing ? 'Analisando...' : 'Pré-visualizar'}
+        </button>
+        <button
+          onClick={handleImport}
+          disabled={!file || !concursoId || importing}
+          className="px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-40 text-white text-[12px] font-semibold transition-colors"
+        >
+          {importing ? 'Importando...' : 'Importar (substitui plano atual)'}
+        </button>
+      </div>
+
+      {preview && (
+        <div className="rounded-btn px-3 py-2 text-[12px] text-white/70" style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}>
+          <p className="font-mono">
+            formato: <span className="text-text-blue">{preview.formato}</span> ·
+            fases: <span className="text-white">{preview.fases}</span> ·
+            semanas: <span className="text-white">{preview.semanas}</span> ·
+            dias: <span className="text-white">{preview.dias}</span> ·
+            tópicos: <span className="text-white">{preview.topicos}</span>
+          </p>
+          {preview.primeira_semana && (
+            <p className="text-[11px] text-white/45 mt-1">
+              1ª semana: S{preview.primeira_semana.numero} ({preview.primeira_semana.inicio} → {preview.primeira_semana.fim}) — {preview.primeira_semana.tema}
+            </p>
+          )}
+        </div>
+      )}
+
+      {result && (
+        <div className="rounded-btn px-3 py-2 text-[12px] text-white/80" style={{ background: 'rgba(122,199,127,0.10)', border: '0.5px solid rgba(122,199,127,0.35)' }}>
+          ✓ Importado: {result.phases} fases · {result.weeks} semanas · {result.days} dias · {result.topics} tópicos
+        </div>
+      )}
+
+      {err && (
+        <div className="rounded-btn px-3 py-2" style={{ background: 'rgba(212,132,90,0.10)', border: '0.5px solid rgba(212,132,90,0.35)' }}>
+          <p className="text-[12px] text-accent-orange">{err}</p>
+        </div>
+      )}
+    </GlassCard>
+  )
+}
+
+
+function AdminConcursoCreate() {
+  const { isAdmin } = useAuth()
+  const { refresh } = useConcurso()
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({
+    slug: '', nome: '', banca: 'FCC', orgao: '', cargo: '',
+    data_prova: '', descricao: '', edital_url: '', publico: false,
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState(null)
+  const [ok, setOk] = useState(null)
+
+  if (!isAdmin) return null
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setSaving(true); setErr(null); setOk(null)
+    try {
+      const payload = { ...form, data_prova: form.data_prova || null }
+      Object.keys(payload).forEach(k => { if (payload[k] === '') payload[k] = null })
+      const res = await api.adminCreateConcurso(payload)
+      setOk(`Criado: ${res.data.slug} (id=${res.data.id})`)
+      setForm({ slug: '', nome: '', banca: 'FCC', orgao: '', cargo: '', data_prova: '', descricao: '', edital_url: '', publico: false })
+      await refresh()
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Erro')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <GlassCard className="p-5 sm:p-6 space-y-3">
+      <button onClick={() => setOpen(o => !o)} className="flex items-center gap-2.5 w-full text-left">
+        <Plus size={18} strokeWidth={1.75} className="text-text-blue" />
+        <h2 className="text-base font-bold text-white">Criar concurso (admin)</h2>
+        <span className="ml-auto text-[11px] text-white/40">{open ? 'fechar' : 'abrir'}</span>
+      </button>
+
+      {open && (
+        <form onSubmit={handleSubmit} className="space-y-3 pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {[
+              ['slug', 'slug (ex: tjce-2026)', true],
+              ['nome', 'nome completo', true],
+              ['banca', 'banca', true],
+              ['orgao', 'órgão', true],
+              ['cargo', 'cargo', true],
+              ['data_prova', 'data prova (YYYY-MM-DD)', false],
+              ['edital_url', 'url do edital', false],
+            ].map(([k, label, required]) => (
+              <input
+                key={k}
+                required={required}
+                placeholder={label}
+                value={form[k]}
+                onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))}
+                className="rounded-btn px-3 py-2 text-[12px] text-white/85 focus:outline-none focus:border-accent-blue"
+                style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+              />
+            ))}
+          </div>
+          <textarea
+            placeholder="descrição (opcional)"
+            value={form.descricao}
+            onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
+            rows={2}
+            className="w-full rounded-btn px-3 py-2 text-[12px] text-white/85 focus:outline-none focus:border-accent-blue"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '0.5px solid rgba(255,255,255,0.12)' }}
+          />
+          <label className="flex items-center gap-2 text-[12px] text-white/70">
+            <input type="checkbox" checked={form.publico} onChange={e => setForm(f => ({ ...f, publico: e.target.checked }))} />
+            Listar no catálogo público (/concursos/disponiveis)
+          </label>
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-4 py-2 rounded-btn bg-accent-blue hover:bg-accent-blue/90 disabled:opacity-40 text-white text-[12px] font-semibold"
+          >
+            {saving ? 'Salvando...' : 'Criar concurso'}
+          </button>
+          {ok && <p className="text-[12px] text-accent-green">{ok}</p>}
+          {err && <p className="text-[12px] text-accent-orange">{err}</p>}
+        </form>
+      )}
+    </GlassCard>
   )
 }

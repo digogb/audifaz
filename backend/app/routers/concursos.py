@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from pydantic import BaseModel
 from datetime import date
 from typing import List, Optional
@@ -9,6 +9,7 @@ from ..auth import get_current_user, get_admin_user
 from ..db import get_db
 from ..models import Concurso, UserConcurso, User
 from ..schemas import ConcursoOut
+from ..services.plan_importer import import_plan, parse_plan, detect_format
 
 router = APIRouter(prefix="/api", tags=["concursos"])
 
@@ -81,6 +82,59 @@ async def admin_create_concurso(
         descricao=concurso.descricao, edital_url=concurso.edital_url, ativo=concurso.ativo,
         atual=False,
     )
+
+
+@router.post("/admin/concursos/{concurso_id}/preview-plano")
+async def admin_preview_plano(
+    concurso_id: int,
+    file: UploadFile = File(...),
+    _: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Faz parse do arquivo sem persistir; útil para mostrar contagens antes de importar."""
+    concurso = await db.get(Concurso, concurso_id)
+    if not concurso:
+        raise HTTPException(404, "Concurso não encontrado")
+    content = (await file.read()).decode("utf-8", errors="replace")
+    fmt = detect_format(content)
+    if fmt == "unknown":
+        raise HTTPException(400, "Formato de plano não reconhecido (SEFAZ ou TJCE)")
+    plan = parse_plan(content)
+    return {
+        "formato": fmt,
+        "fases": len(plan.phases),
+        "semanas": len(plan.weeks),
+        "dias": plan.total_days,
+        "topicos": plan.total_topics,
+        "primeira_semana": (
+            {
+                "numero": plan.weeks[0].numero,
+                "tema": plan.weeks[0].tema,
+                "inicio": plan.weeks[0].data_inicio.isoformat(),
+                "fim": plan.weeks[0].data_fim.isoformat(),
+            }
+            if plan.weeks else None
+        ),
+    }
+
+
+@router.post("/admin/concursos/{concurso_id}/importar-plano")
+async def admin_import_plano(
+    concurso_id: int,
+    file: UploadFile = File(...),
+    _: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apaga Phases/Weeks/StudyDays/Topics do concurso e importa do .md."""
+    concurso = await db.get(Concurso, concurso_id)
+    if not concurso:
+        raise HTTPException(404, "Concurso não encontrado")
+    content = (await file.read()).decode("utf-8", errors="replace")
+    try:
+        counts = await import_plan(db, concurso_id, content)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return {"concurso_id": concurso_id, **counts}
 
 
 @router.put("/me/concurso-atual/{concurso_id}", response_model=ConcursoOut)

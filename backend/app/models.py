@@ -73,7 +73,7 @@ class StudyDay(Base):
     __tablename__ = "study_days"
     id: Mapped[int] = mapped_column(primary_key=True)
     week_id: Mapped[int] = mapped_column(ForeignKey("weeks.id"))
-    data: Mapped[date] = mapped_column(Date, unique=True, index=True)
+    data: Mapped[date] = mapped_column(Date, index=True)
     tipo: Mapped[str] = mapped_column(String(20), default="util")  # util|sabado|domingo|feriado|prova
     status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|em_andamento|concluido
     notas: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
