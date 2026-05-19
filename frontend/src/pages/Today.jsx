@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
+import AudioStatus from '../components/AudioStatus'
 
 const MODEL_LABELS = {
   'claude-sonnet-4-6': 'Sonnet 4.6',
@@ -505,6 +506,8 @@ export default function Today() {
 
         {material && material.status === 'done' && !generating && (
           <>
+            <AudioStatus dayId={day.id} materialReady={true} />
+
             {material.custo_usd && (
               <div className="flex items-center gap-3 sm:gap-4 text-[11px] text-white/40 font-mono flex-wrap">
                 <span className="text-white/60">{MODEL_LABELS[material.modelo] || material.modelo}</span>

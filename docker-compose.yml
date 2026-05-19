@@ -12,7 +12,28 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       - TZ=America/Fortaleza
+    restart: unless-stopped
+
+  audio-worker:
+    build:
+      context: ./audio-worker
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////data/audifaz.db
+      - AUDIOS_DIR=/data/audios
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GCP_TTS_API_KEY=${GCP_TTS_API_KEY}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - VOICE_ANA=${VOICE_ANA:-pt-BR-Chirp3-HD-Kore}
+      - VOICE_LUCAS=${VOICE_LUCAS:-pt-BR-Chirp3-HD-Charon}
+      - POLL_INTERVAL=30
+      - MAX_RETRIES=3
+      - TZ=America/Fortaleza
+    depends_on:
+      - app
     restart: unless-stopped
 
   caddy:

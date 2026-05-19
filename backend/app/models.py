@@ -14,6 +14,7 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    podcast_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, index=True)
 
 
 class Phase(Base):
@@ -161,3 +162,20 @@ class MockExamResult(Base):
     acertos: Mapped[int]
     total: Mapped[int]
     exam: Mapped["MockExam"] = relationship(back_populates="results")
+
+
+class MaterialAudio(Base):
+    __tablename__ = "material_audios"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    study_material_id: Mapped[int] = mapped_column(ForeignKey("study_materials.id"), unique=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|gerando|done|erro
+    arquivo_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    duracao_seg: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tamanho_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    notebooklm_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    instrucoes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    gerado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    concluido_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    error_msg: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    tentativas: Mapped[int] = mapped_column(Integer, default=0)
+    material: Mapped["StudyMaterial"] = relationship()

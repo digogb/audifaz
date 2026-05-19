@@ -4,7 +4,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
-from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User
+from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio
@@ -80,6 +80,27 @@ async def get_material(
     }
 
 
+async def _enqueue_audio(db, material_id: int):
+    """Cria/reseta MaterialAudio('pendente') pro worker pegar."""
+    existing = await db.execute(
+        select(MaterialAudio).where(MaterialAudio.study_material_id == material_id)
+    )
+    audio = existing.scalar_one_or_none()
+    if audio:
+        if audio.status in ("pendente", "gerando"):
+            return
+        audio.status = "pendente"
+        audio.error_msg = None
+        audio.arquivo_path = None
+        audio.duracao_seg = None
+        audio.tamanho_bytes = None
+        audio.notebooklm_id = None
+        audio.gerado_em = datetime.utcnow()
+        audio.concluido_em = None
+    else:
+        db.add(MaterialAudio(study_material_id=material_id, status="pendente"))
+
+
 async def _run_generation_bg(material_id: int, topics: list[str], model: str):
     try:
         content_md, questions_data, usage_dict = await claude_client.generate_material(topics, model)
@@ -109,6 +130,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str):
                     dificuldade=q.get("dificuldade", "medio"),
                     ordem=i,
                 ))
+            await _enqueue_audio(db, material_id)
             await db.commit()
     except Exception as exc:
         try:
@@ -253,6 +275,7 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
             )
             db.add(gq)
 
+        await _enqueue_audio(db, material.id)
         await db.commit()
 
 

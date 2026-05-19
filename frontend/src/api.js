@@ -58,3 +58,9 @@ export const deleteMock = (id) => api.delete(`/mocks/${id}`)
 
 // Progress
 export const getProgress = () => api.get('/progress')
+
+// Audio / Podcast
+export const getAudio = (dayId) => api.get(`/days/${dayId}/audio`)
+export const generateAudio = (dayId) => api.post(`/days/${dayId}/audio/generate`)
+export const getPodcastFeed = () => api.get('/podcast/me')
+export const regeneratePodcastToken = () => api.post('/podcast/regenerate-token')

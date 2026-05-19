@@ -14,7 +14,7 @@ from .models import Base, User, StudyDay, StudyMaterial
 from .seed import seed_if_needed
 from .migrate import migrate
 from .auth import hash_password
-from .routers import days, topics, materials, errors, mocks, progress
+from .routers import days, topics, materials, errors, mocks, progress, audios, podcast
 from .routers import auth as auth_router
 from .routers.materials import generate_for_day
 
@@ -59,10 +59,10 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async with AsyncSessionLocal() as db:
+        await migrate(db)
+    async with AsyncSessionLocal() as db:
         await seed_if_needed(db)
     await _seed_admin()
-    async with AsyncSessionLocal() as db:
-        await migrate(db)
 
     # Start cron scheduler
     scheduler = AsyncIOScheduler(timezone=TZ)
@@ -87,6 +87,8 @@ app.include_router(materials.router)
 app.include_router(errors.router)
 app.include_router(mocks.router)
 app.include_router(progress.router)
+app.include_router(audios.router)
+app.include_router(podcast.router)
 
 # Serve React build in production
 static_dir = Path("/app/static")

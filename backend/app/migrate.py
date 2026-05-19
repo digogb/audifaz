@@ -94,6 +94,34 @@ async def migrate(db: AsyncSession):
                 SELECT :uid, id, concluido, observacao FROM topics WHERE concluido = 1
             """), {"uid": default_user_id})
 
+    # users.podcast_token
+    if await _table_exists(db, "users") and not await _column_exists(db, "users", "podcast_token"):
+        await db.execute(text("ALTER TABLE users ADD COLUMN podcast_token VARCHAR(64)"))
+        await db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_podcast_token ON users(podcast_token)"))
+
+    # material_audios
+    if not await _table_exists(db, "material_audios"):
+        await db.execute(text("""
+            CREATE TABLE material_audios (
+                id INTEGER PRIMARY KEY,
+                study_material_id INTEGER NOT NULL UNIQUE REFERENCES study_materials(id),
+                status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+                arquivo_path VARCHAR(500),
+                duracao_seg INTEGER,
+                tamanho_bytes INTEGER,
+                notebooklm_id VARCHAR(200),
+                instrucoes VARCHAR(1000),
+                gerado_em DATETIME NOT NULL,
+                concluido_em DATETIME,
+                error_msg VARCHAR(500),
+                tentativas INTEGER NOT NULL DEFAULT 0
+            )
+        """))
+        await db.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_material_audios_study_material_id "
+            "ON material_audios(study_material_id)"
+        ))
+
     # user_day_progress
     if not await _table_exists(db, "user_day_progress"):
         await db.execute(text("""

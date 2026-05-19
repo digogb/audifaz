@@ -167,3 +167,21 @@ class PhaseProgress(BaseModel):
     total_days: int
     done_days: int
     pct: float
+
+
+class MaterialAudioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    status: str
+    arquivo_url: Optional[str] = None
+    duracao_seg: Optional[int] = None
+    tamanho_bytes: Optional[int] = None
+    gerado_em: datetime
+    concluido_em: Optional[datetime] = None
+    error_msg: Optional[str] = None
+    tentativas: int = 0
+
+
+class PodcastTokenOut(BaseModel):
+    token: str
+    feed_url: str

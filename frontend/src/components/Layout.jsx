@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X } from 'lucide-react'
+import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X, Settings } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 const nav = [
@@ -8,6 +8,7 @@ const nav = [
   { to: '/erros', label: 'Erros', icon: AlertCircle },
   { to: '/progresso', label: 'Progresso', icon: BarChart2 },
   { to: '/simulados', label: 'Simulados', icon: FileText },
+  { to: '/config', label: 'Config', icon: Settings },
 ]
 
 const glass = {
