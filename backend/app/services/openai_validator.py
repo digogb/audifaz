@@ -90,17 +90,30 @@ async def validate_with_openai(content_md: str, questions_data: list) -> list[di
         f"--- QUESTÕES (amostra) ---\n{questions_json[:6000]}"
     )
 
+    # Modelos GPT-5 e o-series usam max_completion_tokens; modelos antigos usam max_tokens.
+    # Tentamos o novo primeiro e caímos pro antigo se o servidor recusar.
+    base_kwargs = dict(
+        model=OPENAI_VALIDATOR_MODEL,
+        messages=[
+            {"role": "system", "content": _SYSTEM},
+            {"role": "user", "content": user_msg},
+        ],
+        tools=[_TOOL],
+        tool_choice={"type": "function", "function": {"name": "registrar_flags"}},
+    )
     try:
-        resp = await client.chat.completions.create(
-            model=OPENAI_VALIDATOR_MODEL,
-            messages=[
-                {"role": "system", "content": _SYSTEM},
-                {"role": "user", "content": user_msg},
-            ],
-            tools=[_TOOL],
-            tool_choice={"type": "function", "function": {"name": "registrar_flags"}},
-            max_tokens=1500,
-        )
+        try:
+            resp = await client.chat.completions.create(
+                **base_kwargs, max_completion_tokens=1500,
+            )
+        except APIError as exc:
+            # Modelos antigos (gpt-4o, gpt-4-turbo etc.) rejeitam max_completion_tokens
+            if "max_completion_tokens" in str(exc):
+                resp = await client.chat.completions.create(
+                    **base_kwargs, max_tokens=1500,
+                )
+            else:
+                raise
     except APIError as exc:
         logger.error("OpenAI validation falhou: %s", exc)
         return []
