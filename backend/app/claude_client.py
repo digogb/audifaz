@@ -362,6 +362,158 @@ async def generate_material(
     return full_md, all_questions, total_usage
 
 
+# ---- Correção de redação (rubrica FCC) ----
+
+_REDACAO_RUBRICA = """**Rubrica FCC para correção de redação dissertativo-argumentativa (total = 10,0):**
+
+TEMA (7,0 pontos):
+- Recorte temático (0,0 – 2,0): clareza do recorte, alinhamento com o enunciado, não tangenciar
+- Interpretação crítica dos textos de apoio (0,0 – 2,0): diálogo crítico com os textos, não apenas paráfrase
+- Progressão textual (0,0 – 3,0): estrutura argumentativa, encadeamento entre parágrafos, conclusão articulada
+
+NORMA-PADRÃO (3,0 pontos):
+- Propriedade vocabular (0,0 – 0,8): adequação léxica, registro formal, evitar repetições
+- Coesão (0,0 – 1,6): uso de conectivos, referenciação anafórica/catafórica, articulação intra e inter-parágrafos
+- Morfossintaxe (0,0 – 0,6): concordância (verbal e nominal), regência, pontuação, ortografia, crase
+
+**Critérios de zerar (informe em `zerou_motivo` e retorne todas as notas = 0):**
+- Fuga total ao tema
+- Texto com 7 linhas ou menos
+- Texto em outra língua
+- Cópia integral de texto pronto ou de algum dos textos de apoio
+- Identificação do candidato (nome, assinatura) — improvável aqui, mas observe
+- Modalidade diferente da dissertativo-argumentativa (narração, poesia)
+
+**Princípios de avaliação:**
+- Seja criterioso. Notas máximas só para texto realmente bom no critério.
+- Use 0,1 como unidade mínima. Notas como 1,7 ou 2,3 são válidas.
+- O candidato é dev sênior estudando para concurso público; pode soar técnico em alguns trechos. Não penalize tecnicalidade se houver clareza.
+- Em `sugestoes`, aponte 3 a 7 problemas pontuais com a linha aproximada do texto e como melhorar."""
+
+
+def _build_redacao_tool() -> dict:
+    return {
+        "name": "registrar_correcao",
+        "description": "Registra a correção da redação segundo a rubrica FCC.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "nota_recorte": {"type": "number", "minimum": 0, "maximum": 2.0},
+                "nota_interpretacao": {"type": "number", "minimum": 0, "maximum": 2.0},
+                "nota_progressao": {"type": "number", "minimum": 0, "maximum": 3.0},
+                "nota_vocabular": {"type": "number", "minimum": 0, "maximum": 0.8},
+                "nota_coesao": {"type": "number", "minimum": 0, "maximum": 1.6},
+                "nota_morfo": {"type": "number", "minimum": 0, "maximum": 0.6},
+                "feedback_geral": {
+                    "type": "string",
+                    "description": "Parecer geral curto (4 a 8 linhas) destacando pontos fortes e o que mais limita a nota.",
+                },
+                "sugestoes": {
+                    "type": "array",
+                    "description": "3 a 7 problemas pontuais ordenados por relevância.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "trecho": {
+                                "type": "string",
+                                "description": "Fragmento literal do texto do aluno (até 120 chars) que ilustra o problema.",
+                            },
+                            "problema": {
+                                "type": "string",
+                                "description": "Descrição curta do problema (max 200 chars).",
+                            },
+                            "sugestao": {
+                                "type": "string",
+                                "description": "Como melhorar (max 250 chars). Reescreva o trecho quando útil.",
+                            },
+                            "categoria": {
+                                "type": "string",
+                                "enum": ["tema", "estrutura", "vocabular", "coesao", "morfo"],
+                            },
+                        },
+                        "required": ["trecho", "problema", "sugestao", "categoria"],
+                    },
+                },
+                "zerou_motivo": {
+                    "type": "string",
+                    "description": "Preencher SOMENTE quando o texto se enquadra em algum critério de zerar. Caso contrário, omitir.",
+                },
+            },
+            "required": [
+                "nota_recorte", "nota_interpretacao", "nota_progressao",
+                "nota_vocabular", "nota_coesao", "nota_morfo",
+                "feedback_geral", "sugestoes",
+            ],
+        },
+    }
+
+
+async def correct_redacao(
+    texto: str,
+    tema_titulo: str,
+    enunciado: str,
+    textos_apoio: str | None,
+    concurso: ConcursoContext,
+    model: str = "claude-sonnet-4-6",
+) -> tuple[dict, dict]:
+    """Corrige a redação. Retorna (correcao_dict, usage_dict)."""
+    linhas = texto.split("\n")
+    num_linhas = sum(1 for ln in linhas if ln.strip())
+
+    apoio_block = f"\n\n**Textos de apoio:**\n{textos_apoio}" if textos_apoio else ""
+    perfil = _fmt_concurso_profile(concurso)
+    user_msg = f"""{perfil}
+
+---
+
+**Tema da redação:** {tema_titulo}
+
+**Enunciado:**
+{enunciado}{apoio_block}
+
+---
+
+**Texto submetido pelo aluno ({num_linhas} linhas com conteúdo):**
+
+\"\"\"
+{texto}
+\"\"\"
+
+Avalie segundo a rubrica FCC e chame a ferramenta `registrar_correcao`."""
+
+    system_blocks = [
+        {"type": "text", "text": _BASE_SYSTEM, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": _REDACAO_RUBRICA, "cache_control": {"type": "ephemeral"}},
+    ]
+
+    response = await _client.messages.create(
+        model=model,
+        max_tokens=3500,
+        system=system_blocks,
+        tools=[_build_redacao_tool()],
+        tool_choice={"type": "tool", "name": "registrar_correcao"},
+        messages=[{"role": "user", "content": user_msg}],
+    )
+
+    correcao: dict = {}
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "registrar_correcao":
+            correcao = dict(block.input)
+            break
+    if not correcao:
+        raise RuntimeError(f"Claude não retornou correcao (stop={response.stop_reason})")
+
+    usage = response.usage
+    usage_dict = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "web_search_requests": 0,
+    }
+    return correcao, usage_dict
+
+
 async def validate_material(content_md: str, questions_data: list) -> list[dict]:
     """Second-pass validation. Returns list of flags (empty = no issues)."""
     questions_json = json.dumps(questions_data[:8], ensure_ascii=False, indent=2)

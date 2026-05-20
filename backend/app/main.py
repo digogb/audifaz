@@ -14,7 +14,7 @@ from .models import Base, User, StudyDay, StudyMaterial, Week, Phase, Concurso
 from .seed import seed_if_needed
 from .migrate import migrate
 from .auth import hash_password
-from .routers import days, topics, materials, errors, mocks, progress, audios, podcast, concursos, blocos
+from .routers import days, topics, materials, errors, mocks, progress, audios, podcast, concursos, blocos, redacoes
 from .routers import auth as auth_router
 from .routers.materials import generate_for_day
 
@@ -91,6 +91,7 @@ app = FastAPI(title="AudiFaz", lifespan=lifespan)
 app.include_router(auth_router.router)
 app.include_router(concursos.router)
 app.include_router(blocos.router)
+app.include_router(redacoes.router)
 app.include_router(days.router)
 app.include_router(topics.router)
 app.include_router(materials.router)

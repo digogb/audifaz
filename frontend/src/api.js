@@ -65,6 +65,13 @@ export const generateAudio = (dayId) => api.post(`/days/${dayId}/audio/generate`
 export const getPodcastFeed = () => api.get('/podcast/me')
 export const regeneratePodcastToken = () => api.post('/podcast/regenerate-token')
 
+// Redação
+export const getRedacaoTemas = () => api.get('/redacao/temas')
+export const listRedacoes = () => api.get('/redacao')
+export const getRedacao = (id) => api.get(`/redacao/${id}`)
+export const submitRedacao = (tema_id, texto) => api.post('/redacao', { tema_id, texto })
+export const deleteRedacao = (id) => api.delete(`/redacao/${id}`)
+
 // Blocos / Metricas
 export const getBlocos = () => api.get('/blocos')
 export const getMetricasBlocos = () => api.get('/metricas/blocos')

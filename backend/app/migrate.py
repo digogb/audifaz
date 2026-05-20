@@ -285,7 +285,63 @@ async def migrate(db: AsyncSession):
     if await _table_exists(db, "blocos"):
         await _backfill_blocos(db)
 
+    # Temas de redação default
+    if await _table_exists(db, "redacao_temas"):
+        await _seed_redacao_temas_if_needed(db)
+
     await db.commit()
+
+
+_DEFAULT_TEMAS = {
+    "sefaz-ce-2026": [
+        (
+            "Cibersegurança, privacidade e LGPD na transformação digital do Estado",
+            "Redija um texto dissertativo-argumentativo sobre **Cibersegurança, privacidade e LGPD na transformação digital do Estado brasileiro**, posicionando-se sobre os desafios institucionais para conciliar inovação com proteção de dados pessoais.",
+            "**Texto I.** A Lei Geral de Proteção de Dados (Lei 13.709/2018) estabeleceu, no Brasil, um marco regulatório para o tratamento de dados pessoais, incluindo o setor público. A ANPD tornou-se autoridade competente para fiscalização.\n\n**Texto II.** Incidentes de vazamento de dados envolvendo órgãos públicos cresceram nos últimos anos. O CNJ instituiu a Estratégia Nacional de Segurança Cibernética do Judiciário (Res. CNJ 396/2021) para padronizar políticas mínimas.\n\n**Texto III.** \"Transparência ativa e proteção de dados são valores complementares, não excludentes. O desafio é encontrar o ponto de equilíbrio que respeite o art. 5º, X e XXXIII, da Constituição.\" (extrato de artigo acadêmico)",
+        ),
+    ],
+    "tjce-2026": [
+        (
+            "Regulação da Inteligência Artificial generativa no serviço público",
+            "Redija um texto dissertativo-argumentativo, com extensão de 20 a 30 linhas, sobre **A regulação da inteligência artificial generativa no serviço público brasileiro**, analisando criticamente as implicações éticas, jurídicas e operacionais.",
+            "**Texto I.** O CNJ instituiu, em 2023, a Resolução 332/2020 (com alterações posteriores), que estabelece diretrizes para o uso de inteligência artificial no Poder Judiciário, prevendo princípios como transparência, explicabilidade e supervisão humana.\n\n**Texto II.** \"Os sistemas generativos baseados em LLMs apresentam riscos específicos: alucinações factuais, viés algorítmico decorrente dos dados de treinamento e dificuldade de auditoria. Para o serviço público, essas características exigem governança específica.\" (Relatório técnico)\n\n**Texto III.** O PL 2338/2023, em tramitação no Senado, propõe um marco legal para sistemas de IA no Brasil, classificando-os por risco e estabelecendo deveres do agente de IA proporcionais.",
+        ),
+        (
+            "Acesso à Justiça e processo eletrônico: inclusão digital como direito fundamental",
+            "Redija um texto dissertativo-argumentativo sobre **O processo eletrônico e a inclusão digital como condição para o acesso à Justiça**, posicionando-se sobre os limites e as condições para que a digitalização não amplie desigualdades.",
+            "**Texto I.** O art. 5º, LXXIV, da Constituição assegura ao Estado o dever de prestar assistência jurídica integral e gratuita aos que comprovarem insuficiência de recursos. A Lei 11.419/2006 instituiu o processo eletrônico no Judiciário brasileiro.\n\n**Texto II.** Pesquisa do CGI.br aponta que cerca de 13% dos domicílios brasileiros não tinham acesso à internet em 2023, com forte concentração nas regiões Norte e Nordeste e na população idosa e de menor renda.\n\n**Texto III.** A PDPJ-Br (Res. CNJ 335/2020) busca padronizar sistemas processuais entre tribunais. Iniciativas de balcões físicos do Judiciário e parcerias com defensorias visam mitigar o efeito excludente da digitalização.",
+        ),
+        (
+            "Saúde mental no trabalho e teletrabalho no serviço público",
+            "Redija um texto dissertativo-argumentativo sobre **Saúde mental no trabalho, teletrabalho e o dever institucional do empregador público**, analisando as transformações do mundo do trabalho pós-pandemia e seus reflexos no Judiciário e na Administração Pública.",
+            "**Texto I.** A Norma Regulamentadora 1 (NR-1), atualizada em 2024, passou a exigir a inclusão de riscos psicossociais no Programa de Gerenciamento de Riscos das empresas, com aplicação subsidiária ao serviço público.\n\n**Texto II.** Dados da Previdência Social indicam que afastamentos por transtornos mentais e comportamentais cresceram 38% entre 2019 e 2023 no Brasil, com destaque para ansiedade, burnout e depressão.\n\n**Texto III.** O Judiciário ampliou regimes de teletrabalho integral e híbrido após a pandemia. Estudos apontam ganhos de produtividade convivendo com risco de jornada estendida e isolamento.",
+        ),
+    ],
+}
+
+
+async def _seed_redacao_temas_if_needed(db: AsyncSession):
+    """Insere temas default por concurso, somente se ainda não houver tema para o concurso."""
+    rows = (await db.execute(text("SELECT id, slug FROM concursos"))).all()
+    for cid, cslug in rows:
+        count = (await db.execute(
+            text("SELECT COUNT(*) FROM redacao_temas WHERE concurso_id = :cid"),
+            {"cid": cid},
+        )).scalar()
+        if count and count > 0:
+            continue
+        defaults = _DEFAULT_TEMAS.get(cslug)
+        if not defaults:
+            continue
+        for ordem, (titulo, enunciado, apoio) in enumerate(defaults):
+            await db.execute(
+                text("""
+                    INSERT INTO redacao_temas
+                        (concurso_id, titulo, enunciado_md, textos_apoio_md, ativo, ordem, criado_em)
+                    VALUES (:cid, :titulo, :enu, :apoio, 1, :ordem, datetime('now'))
+                """),
+                {"cid": cid, "titulo": titulo, "enu": enunciado, "apoio": apoio, "ordem": ordem},
+            )
 
 
 # Blocos default por concurso. Slugs estáveis; nomes/pesos editáveis depois via admin.

@@ -234,6 +234,49 @@ class BancaExample(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class RedacaoTema(Base):
+    """Tema disponível para redação, curado por concurso."""
+    __tablename__ = "redacao_temas"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    concurso_id: Mapped[int] = mapped_column(ForeignKey("concursos.id"), index=True)
+    titulo: Mapped[str] = mapped_column(String(300))
+    enunciado_md: Mapped[str] = mapped_column(String)
+    textos_apoio_md: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    ordem: Mapped[int] = mapped_column(default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Redacao(Base):
+    """Redação submetida pelo usuário + correção Claude."""
+    __tablename__ = "redacoes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    concurso_id: Mapped[int] = mapped_column(ForeignKey("concursos.id"), index=True)
+    tema_id: Mapped[Optional[int]] = mapped_column(ForeignKey("redacao_temas.id"), nullable=True)
+    tema_titulo_snapshot: Mapped[str] = mapped_column(String(300))
+    texto: Mapped[str] = mapped_column(String)
+    num_linhas: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|corrigindo|done|erro
+    # Notas individuais (preenchidas após correção)
+    nota_recorte: Mapped[Optional[float]] = mapped_column(Float, nullable=True)        # 0-2
+    nota_interpretacao: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0-2
+    nota_progressao: Mapped[Optional[float]] = mapped_column(Float, nullable=True)     # 0-3
+    nota_vocabular: Mapped[Optional[float]] = mapped_column(Float, nullable=True)      # 0-0.8
+    nota_coesao: Mapped[Optional[float]] = mapped_column(Float, nullable=True)         # 0-1.6
+    nota_morfo: Mapped[Optional[float]] = mapped_column(Float, nullable=True)          # 0-0.6
+    nota_total: Mapped[Optional[float]] = mapped_column(Float, nullable=True)          # 0-10
+    feedback_geral: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sugestoes: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    zerou_motivo: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    error_msg: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    tokens_in: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    tokens_out: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    custo_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    corrigido_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class MaterialAudio(Base):
     __tablename__ = "material_audios"
     id: Mapped[int] = mapped_column(primary_key=True)
