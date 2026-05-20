@@ -260,6 +260,14 @@ async def migrate(db: AsyncSession):
             await db.execute(text("ALTER TABLE concursos ADD COLUMN preco_cents INTEGER"))
             await db.execute(text("UPDATE concursos SET preco_cents = 19800 WHERE slug = 'tjce-2026'"))
 
+        # users.email + termos (Fase 7)
+        if not await _column_exists(db, "users", "email"):
+            await db.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(200)"))
+            await db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users(email)"))
+        if not await _column_exists(db, "users", "termos_aceitos_versao"):
+            await db.execute(text("ALTER TABLE users ADD COLUMN termos_aceitos_versao VARCHAR(20)"))
+            await db.execute(text("ALTER TABLE users ADD COLUMN termos_aceitos_em DATETIME"))
+
         # mock_exams.concurso_id
         if await _table_exists(db, "mock_exams") and not await _column_exists(db, "mock_exams", "concurso_id"):
             await db.execute(text("ALTER TABLE mock_exams ADD COLUMN concurso_id INTEGER REFERENCES concursos(id)"))

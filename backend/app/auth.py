@@ -59,6 +59,28 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
     return current_user
 
 
+async def check_daily_quota(
+    db: AsyncSession, user_id: int, model, label: str, limit: int,
+) -> None:
+    """Bloqueia se o user já criou >= `limit` registros do model hoje (UTC).
+    is_internal não é checado aqui — quem chama deve curto-circuitar antes.
+    """
+    from sqlalchemy import func
+    from datetime import date as date_type
+    today_start = datetime.combine(date_type.today(), datetime.min.time())
+    used = (await db.execute(
+        select(func.count(model.id)).where(
+            model.user_id == user_id,
+            model.criado_em >= today_start,
+        )
+    )).scalar() or 0
+    if used >= limit:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Limite diário de {label} atingido ({limit}/dia). Tente novamente amanhã.",
+        )
+
+
 async def require_active_subscription(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

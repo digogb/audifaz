@@ -13,13 +13,20 @@ from ..auth import (
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+import re
+
 TRIAL_DAYS = 7
+TERMOS_VERSAO_ATUAL = "2026-05-19"
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 class SignupRequest(BaseModel):
     username: str
+    email: str
     password: str
-    concurso_slug: str | None = None  # opcional: se omitir, pega 1º público da brand
+    aceita_termos: bool = False
+    concurso_slug: str | None = None
 
 
 @router.post("/login", response_model=TokenOut)
@@ -56,10 +63,17 @@ async def signup(
     """Signup público. Cria User + UserConcurso + Subscription(trial 7 dias).
     O concurso é resolvido pelo slug ou (na ausência) pelo 1º público da brand do host."""
     username = body.username.strip()
+    email = body.email.strip().lower()
     if len(username) < 3 or len(body.password) < 6:
         raise HTTPException(400, "Usuário ou senha muito curtos")
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "E-mail inválido")
+    if not body.aceita_termos:
+        raise HTTPException(400, "Aceite dos termos é obrigatório")
     if (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
         raise HTTPException(409, "Usuário já existe")
+    if (await db.execute(select(User).where(User.email == email))).scalar_one_or_none():
+        raise HTTPException(409, "E-mail já cadastrado")
 
     # Resolve concurso por brand do host (+ slug se fornecido)
     q = select(Concurso).where(
@@ -72,14 +86,20 @@ async def signup(
     if not concurso:
         raise HTTPException(400, "Nenhum concurso público disponível para esta brand")
 
-    user = User(username=username, password_hash=hash_password(body.password))
+    now = datetime.utcnow()
+
+    user = User(
+        username=username, email=email,
+        password_hash=hash_password(body.password),
+        termos_aceitos_versao=TERMOS_VERSAO_ATUAL,
+        termos_aceitos_em=now,
+    )
     db.add(user)
     await db.flush()
     db.add(UserConcurso(user_id=user.id, concurso_id=concurso.id, ativo=True))
     user.concurso_atual_id = concurso.id
 
     # Cria assinatura: se o concurso requer, entra em trial; senão, ativa direto
-    now = datetime.utcnow()
     if concurso.requer_assinatura:
         sub = Subscription(
             user_id=user.id, concurso_id=concurso.id,

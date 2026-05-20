@@ -23,14 +23,17 @@ api.interceptors.response.use(
 // Auth + brand
 export const authLogin = (username, password) => api.post('/auth/login', { username, password })
 export const authRegister = (username, password) => api.post('/auth/register', { username, password })
-export const authSignup = (username, password, concurso_slug) =>
-  api.post('/auth/signup', { username, password, concurso_slug })
+export const authSignup = (body) => api.post('/auth/signup', body)
 export const authMe = () => api.get('/auth/me')
 export const getCurrentBrand = () => api.get('/brand')
 
 // Billing
 export const getMySubscriptions = () => api.get('/billing/me')
 export const createCheckout = (concurso_id) => api.post(`/billing/checkout/${concurso_id}`)
+
+// LGPD
+export const exportMyData = () => api.get('/me/export')
+export const deleteMyAccount = () => api.delete('/me')
 
 // Days
 export const getToday = () => api.get('/days/today')

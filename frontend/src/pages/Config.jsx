@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Headphones, Copy, RefreshCw, Check, ExternalLink, AlertTriangle, FileUp, Plus } from 'lucide-react'
+import { Headphones, Copy, RefreshCw, Check, ExternalLink, AlertTriangle, FileUp, Plus, Download, Trash2 } from 'lucide-react'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { useConcurso } from '../contexts/ConcursoContext'
@@ -164,7 +164,85 @@ export default function Config() {
 
       <AdminPlanImport />
       <AdminConcursoCreate />
+      <DataPrivacyCard />
     </div>
+  )
+}
+
+
+function DataPrivacyCard() {
+  const { isAdmin } = useAuth()
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [info, setInfo] = useState(null)
+
+  async function handleExport() {
+    setBusy(true); setErr(null); setInfo(null)
+    try {
+      const res = await api.exportMyData()
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `audifaz-export-${new Date().toISOString().slice(0,10)}.json`
+      document.body.appendChild(a); a.click()
+      a.remove(); URL.revokeObjectURL(url)
+      setInfo('Arquivo baixado.')
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Falha ao exportar')
+    } finally { setBusy(false) }
+  }
+
+  async function handleDelete() {
+    const phrase = prompt('Para confirmar, digite EXCLUIR (sem aspas):')
+    if (phrase !== 'EXCLUIR') return
+    setBusy(true); setErr(null)
+    try {
+      await api.deleteMyAccount()
+      localStorage.clear()
+      window.location.href = '/login'
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Falha ao excluir')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <GlassCard className="p-5 sm:p-6 space-y-4">
+      <div className="flex items-center gap-2.5">
+        <Download size={18} strokeWidth={1.75} className="text-accent-text" />
+        <h2 className="font-heading text-base font-bold text-primary">Dados e privacidade</h2>
+      </div>
+      <p className="text-[13px] text-muted leading-relaxed">
+        Direitos LGPD (art. 18): você pode baixar uma cópia de todos os seus dados ou apagar a conta a qualquer momento.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={handleExport} disabled={busy}
+          className="surface-input flex items-center gap-2 px-4 py-2 rounded-btn text-[12px] font-semibold text-primary hover:bg-accent-soft transition-colors disabled:opacity-50"
+        >
+          <Download size={13} /> Exportar meus dados (JSON)
+        </button>
+        {!isAdmin && (
+          <button
+            onClick={handleDelete} disabled={busy}
+            className="flex items-center gap-2 px-4 py-2 rounded-btn text-[12px] font-semibold text-danger hover:bg-accent-soft transition-colors disabled:opacity-50"
+            style={{ border: '1px solid color-mix(in srgb, var(--color-danger) 30%, transparent)' }}
+          >
+            <Trash2 size={13} /> Excluir minha conta
+          </button>
+        )}
+      </div>
+
+      {info && <p className="text-[12px] text-success">{info}</p>}
+      {err && <p className="text-[12px] text-danger">{err}</p>}
+      {isAdmin && (
+        <p className="text-[11px] text-subtle">
+          Contas internas (admin) não podem ser excluídas pela API — peça pra remover manualmente no banco.
+        </p>
+      )}
+    </GlassCard>
   )
 }
 

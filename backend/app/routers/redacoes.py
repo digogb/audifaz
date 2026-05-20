@@ -7,7 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import claude_client
-from ..auth import get_admin_user, get_current_user, get_current_concurso, require_active_subscription
+from ..auth import get_admin_user, get_current_user, get_current_concurso, require_active_subscription, check_daily_quota
+
+REDACAO_QUOTA_DIA = 5
 from ..claude_client import ConcursoContext, _calc_cost
 from ..db import AsyncSessionLocal, get_db
 from ..models import Concurso, Redacao, RedacaoTema, User
@@ -239,6 +241,9 @@ async def submit_redacao(
     tema = await db.get(RedacaoTema, body.tema_id)
     if not tema or tema.concurso_id != concurso.id:
         raise HTTPException(404, "Tema não encontrado neste concurso")
+
+    if not current_user.is_internal:
+        await check_daily_quota(db, current_user.id, Redacao, "redações", REDACAO_QUOTA_DIA)
 
     texto = (body.texto or "").strip()
     if not texto:

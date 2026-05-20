@@ -17,6 +17,10 @@ services:
       - MP_ACCESS_TOKEN=${MP_ACCESS_TOKEN:-}
       - MP_WEBHOOK_SECRET=${MP_WEBHOOK_SECRET:-}
       - DEFAULT_BRAND=${DEFAULT_BRAND:-audifaz}
+      - BACKUP_DIR=${BACKUP_DIR:-/data/backups}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      - APP_ENV=${APP_ENV:-development}
       - TZ=America/Fortaleza
     restart: unless-stopped
 

@@ -9,7 +9,9 @@ export default function Signup() {
   const concursoSlug = searchParams.get('concurso') || null
 
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [aceita, setAceita] = useState(false)
   const [err, setErr] = useState(null)
   const [loading, setLoading] = useState(false)
   const [concursos, setConcursos] = useState([])
@@ -25,7 +27,7 @@ export default function Signup() {
     e.preventDefault()
     setErr(null); setLoading(true)
     try {
-      const res = await api.authSignup(username, password, concursoSlug)
+      const res = await api.authSignup({ username, email, password, aceita_termos: aceita, concurso_slug: concursoSlug })
       await login(res.data.token, res.data.username)
       navigate('/')
     } catch (e) {
@@ -57,9 +59,17 @@ export default function Signup() {
           <div>
             <label className="block text-[11px] text-subtle mb-2 font-medium uppercase tracking-wider">Usuário</label>
             <input
-              type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus
+              type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus minLength={3}
               className="surface-input w-full rounded-btn px-3 py-2.5 text-[14px] text-primary placeholder:text-subtle focus:outline-none focus:border-accent"
               placeholder="seu_usuario"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] text-subtle mb-2 font-medium uppercase tracking-wider">E-mail</label>
+            <input
+              type="email" value={email} onChange={e => setEmail(e.target.value)} required
+              className="surface-input w-full rounded-btn px-3 py-2.5 text-[14px] text-primary placeholder:text-subtle focus:outline-none focus:border-accent"
+              placeholder="voce@exemplo.com"
             />
           </div>
           <div>
@@ -70,6 +80,19 @@ export default function Signup() {
               placeholder="mínimo 6 caracteres"
             />
           </div>
+
+          <label className="flex items-start gap-2 text-[12px] text-muted cursor-pointer">
+            <input
+              type="checkbox" checked={aceita} onChange={e => setAceita(e.target.checked)} required
+              className="mt-0.5 accent-current"
+            />
+            <span>
+              Li e aceito os{' '}
+              <a href="/termos" target="_blank" rel="noreferrer" className="text-accent-text hover:underline">Termos de Uso</a>{' '}
+              e a{' '}
+              <a href="/privacidade" target="_blank" rel="noreferrer" className="text-accent-text hover:underline">Política de Privacidade</a>.
+            </span>
+          </label>
 
           {err && (
             <div className="rounded-btn px-3 py-2" style={{ background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-danger) 35%, transparent)' }}>

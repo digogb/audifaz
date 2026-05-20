@@ -15,6 +15,8 @@ import Redacao from './pages/Redacao'
 import Signup from './pages/Signup'
 import Landing from './pages/Landing'
 import Billing from './pages/Billing'
+import Termos from './pages/Termos'
+import Privacidade from './pages/Privacidade'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -27,6 +29,8 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
       <Route path="/landing" element={<Landing />} />
+      <Route path="/termos" element={<Termos />} />
+      <Route path="/privacidade" element={<Privacidade />} />
       <Route path="/billing" element={<ProtectedRoute><Layout><Billing /></Layout></ProtectedRoute>} />
       <Route path="/" element={<ProtectedRoute><Layout><Today /></Layout></ProtectedRoute>} />
       <Route path="/erros" element={<ProtectedRoute><Layout><Errors /></Layout></ProtectedRoute>} />

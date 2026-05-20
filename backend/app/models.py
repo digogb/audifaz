@@ -12,11 +12,14 @@ class User(Base):
     __tablename__ = "users"
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    email: Mapped[Optional[str]] = mapped_column(String(200), unique=True, nullable=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     podcast_token: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True, index=True)
     concurso_atual_id: Mapped[Optional[int]] = mapped_column(ForeignKey("concursos.id"), nullable=True)
     is_internal: Mapped[bool] = mapped_column(Boolean, default=False)
+    termos_aceitos_versao: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    termos_aceitos_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class Concurso(Base):
