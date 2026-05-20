@@ -236,6 +236,11 @@ As alternativas incorretas mais comuns que a banca usa. Confusões típicas de c
 
 **Densidade e precisão antes de extensão.** Cada seção no máximo 600 palavras; conteúdo total ≤ 2500 palavras. **Use `web_search` sempre que precisar confirmar códigos, versões, números ou nomes literais antes de afirmar.**
 
+**ENTREGA — REGRA CRÍTICA DE FORMATO:**
+A primeira linha da sua resposta DEVE ser exatamente `## 1. Resumo Executivo`.
+NUNCA escreva preâmbulo, narração de processo ou meta-comentários como "Agora vou produzir...", "Tenho dados suficientes...", "Vou começar...", "Aqui está o material...", "Perfeito, vamos lá...". Esses textos vazam o seu raciocínio interno no produto final entregue ao aluno e são PROIBIDOS.
+Vá direto para `## 1. Resumo Executivo`. Sem cabeçalhos antes, sem texto introdutório, sem qualquer linha antes do primeiro `##`.
+
 Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente {questions_count} questões estilo {concurso.banca} com:
 - Enunciado-cenário realista (contexto profissional de "{concurso.cargo}" no(a) {concurso.orgao})
 - 5 alternativas plausíveis (erradas devem ser tentadoras, não óbvias)
@@ -286,6 +291,24 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
     }
 
 
+def _strip_preamble(content_md: str) -> str:
+    """Remove qualquer texto antes do primeiro ## (header esperado do material).
+
+    O Claude às vezes vaza thinking ("Agora vou produzir...", "Tenho dados suficientes...")
+    no output mesmo com instrução explícita. Como o material gerado SEMPRE começa
+    com `## 1. Resumo Executivo`, descartar tudo antes do primeiro `## ` é seguro
+    e remove esse vazamento de forma determinística.
+    """
+    if not content_md:
+        return content_md
+    # Encontra o primeiro `## ` em início de linha
+    import re
+    m = re.search(r"^##\s", content_md, re.MULTILINE)
+    if not m:
+        return content_md.strip()
+    return content_md[m.start():].strip()
+
+
 async def _generate_for_topic(
     topic: str,
     questions_count: int,
@@ -309,6 +332,8 @@ async def _generate_for_topic(
                 questions_data = block.input.get("questoes", [])
             except Exception:
                 questions_data = []
+
+    content_md = _strip_preamble(content_md)
 
     usage = response.usage
     web_searches = 0
