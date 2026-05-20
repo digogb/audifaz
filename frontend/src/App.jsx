@@ -11,6 +11,7 @@ import Progress from './pages/Progress'
 import Mocks from './pages/Mocks'
 import Config from './pages/Config'
 import Metricas from './pages/Metricas'
+import Plano from './pages/Plano'
 import Redacao from './pages/Redacao'
 import Signup from './pages/Signup'
 import Landing from './pages/Landing'
@@ -37,6 +38,7 @@ function AppRoutes() {
       <Route path="/progresso" element={<ProtectedRoute><Layout><Progress /></Layout></ProtectedRoute>} />
       <Route path="/simulados" element={<ProtectedRoute><Layout><Mocks /></Layout></ProtectedRoute>} />
       <Route path="/metricas" element={<ProtectedRoute><Layout><Metricas /></Layout></ProtectedRoute>} />
+      <Route path="/plano" element={<ProtectedRoute><Layout><Plano /></Layout></ProtectedRoute>} />
       <Route path="/redacao" element={<ProtectedRoute><Layout><Redacao /></Layout></ProtectedRoute>} />
       <Route path="/config" element={<ProtectedRoute><Layout><Config /></Layout></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" />} />

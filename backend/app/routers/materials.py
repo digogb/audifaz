@@ -162,6 +162,18 @@ async def _enqueue_audio(db, material_id: int):
 
 
 async def _run_generation_bg(material_id: int, topics: list[str], model: str, concurso_id: int):
+    """Pipeline com cross-provider validation e retry single-shot.
+
+    1. Sonnet gera material + questões.
+    2. Validador (OpenAI ou Claude fallback) audita.
+    3. Se houver flag de severidade ALTA, regenera 1x com instrução focada
+       nos flags ("a 1ª tentativa errou X; corrija isso").
+    4. Re-valida. Publica.
+    5. Status final: ok | warning | alerta (warning persistente → Sentry).
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
     try:
         async with AsyncSessionLocal() as db_pre:
             concurso = await db_pre.get(Concurso, concurso_id)
@@ -170,10 +182,50 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             examples = await _load_examples(db_pre, concurso.banca)
             bloco_map = await _load_blocos(db_pre, concurso_id)
             ctx = _to_ctx(concurso)
+
+        # --- 1ª tentativa ---
         content_md, questions_data, usage_dict = await claude_client.generate_material(
             topics, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
         )
-        validation_flags = await claude_client.validate_material(content_md, questions_data)
+        flags, val_info = await claude_client.validate_material(content_md, questions_data)
+        tentativas = 1
+        regenerado_em = None
+
+        # --- retry se há flag alta ---
+        if claude_client.has_high_severity(flags):
+            logger.info("material %s: flag alta detectada, regenerando 1x", material_id)
+            retry_feedback = claude_client.format_flags_for_retry(flags)
+            # Anexa o feedback ao primeiro tópico — o gerador é per-topic, então
+            # injeta como sufixo do prompt do usuário via instrução adicional
+            topics_with_feedback = [f"{topics[0]}\n\n{retry_feedback}", *topics[1:]] if topics else topics
+            content_md2, questions_data2, usage_dict2 = await claude_client.generate_material(
+                topics_with_feedback, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
+            )
+            flags2, _ = await claude_client.validate_material(content_md2, questions_data2)
+            tentativas = 2
+            regenerado_em = datetime.utcnow()
+            # Sobrescreve com a segunda versão
+            content_md, questions_data, flags = content_md2, questions_data2, flags2
+            # Soma usage
+            for k in usage_dict:
+                usage_dict[k] = (usage_dict.get(k) or 0) + (usage_dict2.get(k) or 0)
+
+        # --- classifica status final ---
+        if not flags:
+            validacao_status = "ok"
+        elif claude_client.has_high_severity(flags):
+            validacao_status = "alerta"  # persistiu mesmo após retry
+            # Alerta admin via Sentry (se configurado)
+            try:
+                import sentry_sdk
+                sentry_sdk.capture_message(
+                    f"material {material_id}: flag alta persistiu após retry",
+                    level="warning",
+                )
+            except Exception:
+                pass
+        else:
+            validacao_status = "warning"  # só média/baixa
 
         async with AsyncSessionLocal() as db:
             material = await db.get(StudyMaterial, material_id)
@@ -184,7 +236,12 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             material.tokens_out = usage_dict.get("output_tokens")
             material.custo_usd = _calc_cost(model, usage_dict)
             material.cache_hit_ratio = _calc_cache_ratio(usage_dict)
-            material.validation_flags = validation_flags
+            material.validation_flags = flags
+            material.tentativas_geracao = tentativas
+            material.validador_provider = val_info.get("provider")
+            material.validador_modelo = val_info.get("model")
+            material.validacao_status = validacao_status
+            material.regenerado_em = regenerado_em
             material.status = "done"
             material.error_msg = None
 
@@ -324,10 +381,33 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
         bloco_map = await _load_blocos(db, concurso.id)
         ctx = _to_ctx(concurso)
 
+    # Mesma lógica de retry do _run_generation_bg
     content_md, questions_data, usage_dict = await claude_client.generate_material(
         topics, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
     )
-    validation_flags = await claude_client.validate_material(content_md, questions_data)
+    flags, val_info = await claude_client.validate_material(content_md, questions_data)
+    tentativas = 1
+    regenerado_em = None
+
+    if claude_client.has_high_severity(flags):
+        retry_feedback = claude_client.format_flags_for_retry(flags)
+        topics_retry = [f"{topics[0]}\n\n{retry_feedback}", *topics[1:]] if topics else topics
+        content_md2, questions_data2, usage_dict2 = await claude_client.generate_material(
+            topics_retry, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
+        )
+        flags2, _ = await claude_client.validate_material(content_md2, questions_data2)
+        content_md, questions_data, flags = content_md2, questions_data2, flags2
+        tentativas = 2
+        regenerado_em = datetime.utcnow()
+        for k in usage_dict:
+            usage_dict[k] = (usage_dict.get(k) or 0) + (usage_dict2.get(k) or 0)
+
+    if not flags:
+        validacao_status = "ok"
+    elif claude_client.has_high_severity(flags):
+        validacao_status = "alerta"
+    else:
+        validacao_status = "warning"
 
     async with AsyncSessionLocal() as db:
         material = StudyMaterial(
@@ -338,7 +418,12 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
             tokens_out=usage_dict.get("output_tokens"),
             custo_usd=_calc_cost(model, usage_dict),
             cache_hit_ratio=_calc_cache_ratio(usage_dict),
-            validation_flags=validation_flags,
+            validation_flags=flags,
+            tentativas_geracao=tentativas,
+            validador_provider=val_info.get("provider"),
+            validador_modelo=val_info.get("model"),
+            validacao_status=validacao_status,
+            regenerado_em=regenerado_em,
             status="done",
         )
         db.add(material)

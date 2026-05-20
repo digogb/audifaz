@@ -131,6 +131,13 @@ class StudyMaterial(Base):
     validation_flags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="done")
     error_msg: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    # --- cross-provider validation pipeline ---
+    tentativas_geracao: Mapped[int] = mapped_column(Integer, default=1)
+    validador_provider: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    validador_modelo: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    validacao_status: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|ok|warning|alerta
+    regenerado_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
     study_day: Mapped["StudyDay"] = relationship(back_populates="material")
     questions: Mapped[List["GeneratedQuestion"]] = relationship(
         back_populates="material", order_by="GeneratedQuestion.ordem"
@@ -300,6 +307,25 @@ class Redacao(Base):
     custo_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     corrigido_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class ContentReport(Base):
+    """Aluno reporta erro/imprecisão em questão ou seção do material.
+    Vira corpus de QA: admin revisa, decide se regenera/desativa."""
+    __tablename__ = "content_reports"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    concurso_id: Mapped[Optional[int]] = mapped_column(ForeignKey("concursos.id"), nullable=True, index=True)
+    target_type: Mapped[str] = mapped_column(String(20))  # 'question' | 'material' | 'redacao'
+    question_id: Mapped[Optional[int]] = mapped_column(ForeignKey("generated_questions.id"), nullable=True)
+    material_id: Mapped[Optional[int]] = mapped_column(ForeignKey("study_materials.id"), nullable=True)
+    redacao_id: Mapped[Optional[int]] = mapped_column(ForeignKey("redacoes.id"), nullable=True)
+    categoria: Mapped[str] = mapped_column(String(40), default="outro")
+    descricao: Mapped[str] = mapped_column(String(2000))
+    status: Mapped[str] = mapped_column(String(20), default="aberto")  # aberto|revisado|aceito|recusado
+    nota_admin: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    resolvido_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class MaterialAudio(Base):

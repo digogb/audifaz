@@ -514,8 +514,8 @@ Avalie segundo a rubrica FCC e chame a ferramenta `registrar_correcao`."""
     return correcao, usage_dict
 
 
-async def validate_material(content_md: str, questions_data: list) -> list[dict]:
-    """Second-pass validation. Returns list of flags (empty = no issues)."""
+async def _validate_with_claude(content_md: str, questions_data: list) -> list[dict]:
+    """Validação interna (fallback) usando Claude. Mesmo provider → menor cobertura."""
     questions_json = json.dumps(questions_data[:8], ensure_ascii=False, indent=2)
     user_msg = (
         "Analise o material abaixo. Chame `registrar_flags` com todas as inconsistências encontradas "
@@ -538,3 +538,40 @@ async def validate_material(content_md: str, questions_data: list) -> list[dict]
     except Exception:
         pass
     return []
+
+
+async def validate_material(content_md: str, questions_data: list) -> tuple[list[dict], dict]:
+    """Validação cross-provider: prefere OpenAI (modelo de outro provedor),
+    cai pra Claude se OpenAI não estiver configurado.
+
+    Retorna (flags, info) onde info inclui provider e modelo usados.
+    """
+    import os
+    from .services.openai_validator import validate_with_openai, OPENAI_API_KEY, OPENAI_VALIDATOR_MODEL
+
+    if OPENAI_API_KEY:
+        flags = await validate_with_openai(content_md, questions_data)
+        return flags, {"provider": "openai", "model": OPENAI_VALIDATOR_MODEL}
+
+    flags = await _validate_with_claude(content_md, questions_data)
+    return flags, {"provider": "anthropic", "model": "claude-sonnet-4-6"}
+
+
+def has_high_severity(flags: list[dict]) -> bool:
+    return any((f.get("severidade") == "alta") for f in (flags or []))
+
+
+def format_flags_for_retry(flags: list[dict]) -> str:
+    """Formata os flags como feedback para o gerador na 2ª tentativa."""
+    if not flags:
+        return ""
+    lines = ["**Problemas identificados pela auditoria na geração anterior — corrija cada um:**"]
+    for f in flags:
+        sev = f.get("severidade", "media")
+        ref = f.get("referencia", "?")
+        desc = f.get("descricao", "")
+        lines.append(f"- [{sev}] {ref}: {desc}")
+    lines.append(
+        "\n**Use `web_search` para confirmar a versão correta de cada item acima antes de regravar.**"
+    )
+    return "\n".join(lines)

@@ -21,6 +21,8 @@ services:
       - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
       - SENTRY_DSN=${SENTRY_DSN:-}
       - APP_ENV=${APP_ENV:-development}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_VALIDATOR_MODEL=${OPENAI_VALIDATOR_MODEL:-gpt-5-mini}
       - TZ=America/Fortaleza
     restart: unless-stopped
 

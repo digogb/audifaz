@@ -260,6 +260,17 @@ async def migrate(db: AsyncSession):
             await db.execute(text("ALTER TABLE concursos ADD COLUMN preco_cents INTEGER"))
             await db.execute(text("UPDATE concursos SET preco_cents = 19800 WHERE slug = 'tjce-2026'"))
 
+        # study_materials: cross-provider validation pipeline (Fase 7b)
+        if await _table_exists(db, "study_materials") and not await _column_exists(db, "study_materials", "tentativas_geracao"):
+            await db.execute(text("ALTER TABLE study_materials ADD COLUMN tentativas_geracao INTEGER NOT NULL DEFAULT 1"))
+            await db.execute(text("ALTER TABLE study_materials ADD COLUMN validador_provider VARCHAR(20)"))
+            await db.execute(text("ALTER TABLE study_materials ADD COLUMN validador_modelo VARCHAR(50)"))
+            await db.execute(text("ALTER TABLE study_materials ADD COLUMN validacao_status VARCHAR(20) NOT NULL DEFAULT 'pendente'"))
+            await db.execute(text("ALTER TABLE study_materials ADD COLUMN regenerado_em DATETIME"))
+            # Backfill: materiais existentes — se tem validation_flags=[] vira 'ok', se tem flags vira 'warning'
+            await db.execute(text("UPDATE study_materials SET validacao_status = 'ok' WHERE validation_flags = '[]' OR validation_flags IS NULL"))
+            await db.execute(text("UPDATE study_materials SET validacao_status = 'warning' WHERE validation_flags IS NOT NULL AND validation_flags != '[]'"))
+
         # users.email + termos (Fase 7)
         if not await _column_exists(db, "users", "email"):
             await db.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(200)"))

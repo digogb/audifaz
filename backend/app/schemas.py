@@ -88,6 +88,12 @@ class StudyMaterialOut(BaseModel):
     validation_flags: Optional[list] = None
     status: str = "done"
     error_msg: Optional[str] = None
+    # Cross-provider validation pipeline
+    tentativas_geracao: int = 1
+    validador_provider: Optional[str] = None
+    validador_modelo: Optional[str] = None
+    validacao_status: str = "pendente"  # pendente|ok|warning|alerta
+    regenerado_em: Optional[datetime] = None
     questions: List[GeneratedQuestionOut] = []
 
 

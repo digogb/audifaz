@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm'
 import {
   Sparkles, CheckSquare, Square, ChevronDown, ChevronUp,
   RefreshCw, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck,
+  Flag, X, Send,
 } from 'lucide-react'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
@@ -52,37 +53,71 @@ function SectionLabel({ children }) {
 const SEVERITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' }
 const SEVERITY_CLS = { alta: 'text-danger', media: 'text-secondary', baixa: 'text-subtle' }
 
-function ValidationBanner({ flags }) {
+const STATUS_META = {
+  ok: {
+    bg: 'bg-accent-soft',
+    border: 'border-accent-soft',
+    text: 'text-accent-text',
+    icon: ShieldCheck,
+    label: 'Validado por auditor cross-provider — sem inconsistências detectadas',
+    severity: 'success',
+  },
+  warning: {
+    bg: 'bg-accent-soft',
+    border: 'border-accent-soft',
+    text: 'text-secondary',
+    icon: ShieldAlert,
+    label: 'Possíveis imprecisões de severidade média/baixa — revise antes de fixar',
+    severity: 'warning',
+  },
+  alerta: {
+    bg: null,
+    border: null,
+    text: 'text-danger',
+    icon: ShieldAlert,
+    label: 'Material regenerado e ainda apresenta inconsistências graves — confirme em fonte oficial',
+    severity: 'error',
+  },
+}
+
+function ValidationBanner({ material }) {
   const [open, setOpen] = useState(false)
-  if (flags === null || flags === undefined) return null
+  if (!material) return null
+  const flags = material.validation_flags
+  const status = material.validacao_status || (flags?.length ? 'warning' : 'ok')
+  const meta = STATUS_META[status] || STATUS_META.warning
+  const Icon = meta.icon
+  const altas = (flags || []).filter(f => f.severidade === 'alta').length
+  const isError = status === 'alerta'
 
-  if (flags.length === 0) {
-    return (
-      <div className="flex items-center gap-2 px-4 py-2.5 rounded-btn text-[12px] text-accent-text bg-accent-soft">
-        <ShieldCheck size={13} strokeWidth={2} />
-        Validado — sem inconsistências detectadas
-      </div>
-    )
-  }
-
-  const altas = flags.filter(f => f.severidade === 'alta').length
+  const wrapperStyle = isError
+    ? { background: 'color-mix(in srgb, var(--color-danger) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--color-danger) 45%, transparent)' }
+    : status === 'warning'
+      ? { background: 'color-mix(in srgb, var(--color-secondary) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-secondary) 35%, transparent)' }
+      : null
 
   return (
-    <div className="rounded-btn overflow-hidden"
-      style={{ background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-danger) 35%, transparent)' }}>
+    <div className={`rounded-btn overflow-hidden ${!wrapperStyle ? 'bg-accent-soft' : ''}`} style={wrapperStyle || {}}>
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left"
       >
-        <div className="flex items-center gap-2 text-[12px] text-danger font-medium">
-          <ShieldAlert size={13} strokeWidth={2} />
-          {flags.length} inconsistência{flags.length > 1 ? 's' : ''} detectada{flags.length > 1 ? 's' : ''}
-          {altas > 0 && <span className="text-[11px] text-muted">({altas} alta{altas > 1 ? 's' : ''})</span>}
+        <div className={`flex items-center gap-2 text-[12px] font-medium ${meta.text}`}>
+          <Icon size={13} strokeWidth={2} />
+          <span>{meta.label}</span>
+          {altas > 0 && <span className="text-[11px] text-subtle">({altas} alta{altas > 1 ? 's' : ''})</span>}
+          {material.tentativas_geracao > 1 && (
+            <span className="text-[10px] font-mono uppercase tracking-wider text-subtle ml-1">
+              regenerado {material.tentativas_geracao}×
+            </span>
+          )}
         </div>
-        {open ? <ChevronUp size={12} className="text-subtle" /> : <ChevronDown size={12} className="text-subtle" />}
+        {flags && flags.length > 0 && (open
+          ? <ChevronUp size={12} className="text-subtle" />
+          : <ChevronDown size={12} className="text-subtle" />)}
       </button>
-      {open && (
-        <div className="px-4 pb-3 space-y-2 border-t" style={{ borderColor: 'color-mix(in srgb, var(--color-danger) 20%, transparent)' }}>
+      {open && flags && flags.length > 0 && (
+        <div className="px-4 pb-3 space-y-2 border-t" style={{ borderColor: 'color-mix(in srgb, var(--color-text) 10%, transparent)' }}>
           {flags.map((f, i) => (
             <div key={i} className="pt-2">
               <div className="flex items-center gap-2 text-[11px] font-mono text-subtle mb-0.5">
@@ -95,6 +130,85 @@ function ValidationBanner({ flags }) {
           ))}
         </div>
       )}
+      {material.validador_provider && (
+        <div className="px-4 pb-2 text-[10px] font-mono text-subtle">
+          auditor: {material.validador_provider}/{material.validador_modelo}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function ReportButton({ target_type, question_id, material_id, redacao_id, label = 'Reportar erro' }) {
+  const [open, setOpen] = useState(false)
+  const [categoria, setCategoria] = useState('conteudo')
+  const [descricao, setDescricao] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [err, setErr] = useState(null)
+
+  async function submit() {
+    setBusy(true); setErr(null)
+    try {
+      await api.reportContent({ target_type, question_id, material_id, redacao_id, categoria, descricao })
+      setSent(true)
+      setTimeout(() => { setOpen(false); setSent(false); setDescricao('') }, 1800)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Falha ao enviar')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1 text-[11px] text-subtle hover:text-danger transition-colors"
+      >
+        <Flag size={11} strokeWidth={2} /> {label}
+      </button>
+    )
+  }
+
+  return (
+    <div className="mt-3 surface-input rounded-btn p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-widest text-subtle">Reportar problema</span>
+        <button onClick={() => setOpen(false)} className="text-subtle hover:text-primary"><X size={13} /></button>
+      </div>
+      <select
+        value={categoria}
+        onChange={e => setCategoria(e.target.value)}
+        className="surface-input w-full rounded-btn px-2 py-1.5 text-[12px] text-primary focus:outline-none focus:border-accent"
+      >
+        <option value="conteudo">Conteúdo incorreto</option>
+        <option value="questao">Questão com erro</option>
+        <option value="gabarito">Gabarito errado</option>
+        <option value="redacao">Correção de redação imprecisa</option>
+        <option value="outro">Outro</option>
+      </select>
+      <textarea
+        value={descricao}
+        onChange={e => setDescricao(e.target.value)}
+        rows={3}
+        minLength={10}
+        placeholder="Descreva o problema com pelo menos 10 caracteres. Inclua a versão correta segundo fonte oficial, se souber."
+        className="surface-input w-full rounded-btn px-3 py-2 text-[12px] text-primary placeholder:text-subtle focus:outline-none focus:border-accent"
+      />
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={submit}
+          disabled={busy || descricao.trim().length < 10}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-accent hover:bg-accent-hover disabled:opacity-50 text-[12px] font-semibold"
+          style={{ color: 'var(--color-bg)' }}
+        >
+          {busy ? <RefreshCw size={11} className="animate-spin" /> : <Send size={11} />}
+          {sent ? 'Enviado!' : 'Enviar'}
+        </button>
+        {err && <span className="text-[11px] text-danger">{err}</span>}
+      </div>
     </div>
   )
 }
@@ -173,6 +287,9 @@ function QuestionCard({ q }) {
           )}
         </div>
       )}
+      <div className="pt-1 flex justify-end">
+        <ReportButton target_type="question" question_id={q.id} label="Reportar erro nesta questão" />
+      </div>
     </Card>
   )
 }
@@ -474,11 +591,14 @@ export default function Today() {
               </div>
             )}
 
-            <ValidationBanner flags={material.validation_flags} />
+            <ValidationBanner material={material} />
 
             <Card className="p-4 sm:p-6 md:p-7">
               <div className="prose-study">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{material.conteudo_md}</ReactMarkdown>
+              </div>
+              <div className="pt-3 mt-3 flex justify-end" style={{ borderTop: 'var(--surface-border)' }}>
+                <ReportButton target_type="material" material_id={material.id} label="Reportar erro no material" />
               </div>
             </Card>
 

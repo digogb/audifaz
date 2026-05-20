@@ -72,6 +72,16 @@ export const deleteMock = (id) => api.delete(`/mocks/${id}`)
 // Progress
 export const getProgress = () => api.get('/progress')
 
+// Plano completo (esqueleto: fases > semanas > dias > tópicos, sem conteúdo gerado)
+export const getPlano = () => api.get('/plano')
+
+// Content reports (reportar erro em questão/material/redação)
+export const reportContent = (data) => api.post('/content-reports', data)
+export const listMyReports = () => api.get('/content-reports/me')
+export const adminListReports = (status) => api.get('/admin/content-reports', { params: status ? { status } : {} })
+export const adminResolveReport = (id, status, nota_admin) =>
+  api.put(`/admin/content-reports/${id}/resolve`, { status, nota_admin })
+
 // Audio / Podcast
 export const getAudio = (dayId) => api.get(`/days/${dayId}/audio`)
 export const generateAudio = (dayId) => api.post(`/days/${dayId}/audio/generate`)
