@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Headphones, Copy, RefreshCw, Check, ExternalLink, AlertTriangle, FileUp, Plus, Download, Trash2 } from 'lucide-react'
+import { Headphones, Copy, RefreshCw, Check, ExternalLink, AlertTriangle, FileUp, Plus, Download, Trash2, Flag, Inbox } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
 import { useConcurso } from '../contexts/ConcursoContext'
@@ -162,10 +164,215 @@ export default function Config() {
         )}
       </GlassCard>
 
+      <AdminContentReports />
       <AdminPlanImport />
       <AdminConcursoCreate />
       <DataPrivacyCard />
     </div>
+  )
+}
+
+
+const STATUS_OPTIONS = [
+  { value: 'aberto',    label: 'Abertos',   cls: 'text-danger' },
+  { value: 'revisado',  label: 'Revisados', cls: 'text-secondary' },
+  { value: 'aceito',    label: 'Aceitos',   cls: 'text-success' },
+  { value: 'recusado',  label: 'Recusados', cls: 'text-subtle' },
+]
+
+const CATEGORIA_LABEL = {
+  conteudo: 'Conteúdo',
+  questao: 'Questão',
+  gabarito: 'Gabarito',
+  redacao: 'Redação',
+  outro: 'Outro',
+}
+
+
+function ReportRow({ report, onResolved }) {
+  const { isAdmin } = useAuth()
+  const [nota, setNota] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function resolve(status) {
+    setBusy(true)
+    try {
+      await api.adminResolveReport(report.id, status, nota.trim() || null)
+      onResolved()
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const isOpen = report.status === 'aberto'
+  const targetLabel =
+    report.target_type === 'question' ? `Questão #${report.question_id}` :
+    report.target_type === 'material' ? `Material #${report.material_id}` :
+    report.target_type === 'redacao'  ? `Redação #${report.redacao_id}` : report.target_type
+
+  return (
+    <div className="surface-input rounded-btn p-3 space-y-2">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-accent-text">
+          {CATEGORIA_LABEL[report.categoria] || report.categoria}
+        </span>
+        <span className="text-[11px] text-subtle">·</span>
+        <span className="text-[11px] text-muted font-mono">{targetLabel}</span>
+        <span className="text-[11px] text-subtle">·</span>
+        <span className="text-[11px] text-muted">
+          <span className="font-mono">{report.username || `u#${report.user_id}`}</span>
+        </span>
+        <span className="ml-auto text-[11px] font-mono text-subtle">
+          {format(parseISO(report.criado_em), "dd/MM HH:mm", { locale: ptBR })}
+        </span>
+      </div>
+
+      <p className="text-[13px] text-primary leading-relaxed whitespace-pre-wrap">{report.descricao}</p>
+
+      {report.target_preview && (
+        <details>
+          <summary className="cursor-pointer text-[11px] text-accent-text">Ver trecho do alvo</summary>
+          <p className="text-[11px] text-muted mt-1 italic">&ldquo;{report.target_preview}…&rdquo;</p>
+        </details>
+      )}
+
+      {report.nota_admin && (
+        <div className="rounded-btn px-2 py-1.5 bg-accent-soft">
+          <p className="text-[11px] text-muted"><span className="text-accent-text font-semibold">Nota admin:</span> {report.nota_admin}</p>
+        </div>
+      )}
+
+      {isOpen && isAdmin && (
+        <div className="pt-1 space-y-2">
+          <input
+            type="text"
+            value={nota}
+            onChange={e => setNota(e.target.value)}
+            placeholder="Nota (opcional): o que vai fazer ou por que recusou?"
+            className="surface-input w-full rounded-btn px-2 py-1.5 text-[12px] text-primary focus:outline-none focus:border-accent"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => resolve('aceito')}
+              disabled={busy}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-btn text-[12px] font-semibold text-success hover:bg-accent-soft transition-colors"
+              style={{ border: '1px solid color-mix(in srgb, var(--color-success) 30%, transparent)' }}
+            >
+              <Check size={11} /> Aceitar (é erro)
+            </button>
+            <button
+              onClick={() => resolve('recusado')}
+              disabled={busy}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-btn text-[12px] font-semibold text-danger hover:bg-accent-soft transition-colors"
+              style={{ border: '1px solid color-mix(in srgb, var(--color-danger) 30%, transparent)' }}
+            >
+              Recusar
+            </button>
+            <button
+              onClick={() => resolve('revisado')}
+              disabled={busy}
+              className="surface-input inline-flex items-center gap-1 px-3 py-1.5 rounded-btn text-[12px] font-semibold text-muted hover:bg-accent-soft transition-colors"
+            >
+              Só revisado
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!isOpen && (
+        <p className="text-[11px] text-subtle font-mono">
+          {report.status} · {report.resolvido_em && format(parseISO(report.resolvido_em), "dd/MM HH:mm", { locale: ptBR })}
+        </p>
+      )}
+    </div>
+  )
+}
+
+
+function AdminContentReports() {
+  const { isAdmin } = useAuth()
+  const [filter, setFilter] = useState('aberto')
+  const [reports, setReports] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState(null)
+
+  async function load() {
+    setLoading(true); setErr(null)
+    try {
+      const r = await api.adminListReports(filter)
+      setReports(r.data)
+    } catch (e) {
+      setErr(e.response?.data?.detail || 'Erro')
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { if (isAdmin) load() }, [isAdmin, filter]) // eslint-disable-line
+
+  if (!isAdmin) return null
+
+  return (
+    <GlassCard className="p-5 sm:p-6 space-y-4">
+      <div className="flex items-center gap-2.5">
+        <Inbox size={18} strokeWidth={1.75} className="text-accent-text" />
+        <h2 className="font-heading text-base font-bold text-primary">Reportes de conteúdo (admin)</h2>
+        {filter === 'aberto' && reports.length > 0 && (
+          <span className="ml-auto inline-flex items-center justify-center text-[11px] font-mono font-bold text-danger px-2 py-0.5 rounded-full" style={{ background: 'color-mix(in srgb, var(--color-danger) 12%, transparent)' }}>
+            {reports.length}
+          </span>
+        )}
+      </div>
+      <p className="text-[13px] text-muted leading-relaxed">
+        Alunos podem reportar erros em questões, materiais ou correções de redação.
+        Use para refinar prompts ou regenerar conteúdos problemáticos.
+      </p>
+
+      <div className="flex flex-wrap gap-1.5">
+        {STATUS_OPTIONS.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setFilter(opt.value)}
+            className={`px-3 py-1.5 rounded-btn text-[12px] font-medium transition-colors ${
+              filter === opt.value
+                ? 'bg-accent-soft text-accent-text'
+                : 'surface-input text-muted hover:bg-accent-soft'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <button
+          onClick={load}
+          disabled={loading}
+          className="ml-auto inline-flex items-center gap-1 text-[11px] text-subtle hover:text-primary transition-colors"
+        >
+          <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Atualizar
+        </button>
+      </div>
+
+      {err && (
+        <div className="rounded-btn px-3 py-2" style={{ background: 'color-mix(in srgb, var(--color-danger) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--color-danger) 35%, transparent)' }}>
+          <p className="text-[12px] text-danger">{err}</p>
+        </div>
+      )}
+
+      {loading && <p className="text-[12px] text-subtle animate-pulse">Carregando...</p>}
+
+      {!loading && reports.length === 0 && (
+        <div className="text-center py-6">
+          <Flag size={20} className="text-subtle mx-auto mb-2" strokeWidth={1.5} />
+          <p className="text-[12px] text-subtle">Nenhum reporte {filter === 'aberto' ? 'aberto' : `como "${filter}"`}.</p>
+        </div>
+      )}
+
+      {!loading && reports.length > 0 && (
+        <div className="space-y-2">
+          {reports.map(r => (
+            <ReportRow key={r.id} report={r} onResolved={load} />
+          ))}
+        </div>
+      )}
+    </GlassCard>
   )
 }
 

@@ -43,6 +43,15 @@ class ReportOut(BaseModel):
     resolvido_em: Optional[datetime] = None
 
 
+class AdminReportOut(ReportOut):
+    """Visão admin enriquecida: inclui username do autor e contexto do alvo."""
+    user_id: int
+    username: Optional[str] = None
+    concurso_id: Optional[int] = None
+    # Trecho curto do alvo (enunciado da questão, primeiras linhas do material, tema da redação)
+    target_preview: Optional[str] = None
+
+
 class ReportResolve(BaseModel):
     status: str  # revisado|aceito|recusado
     nota_admin: Optional[str] = None
@@ -113,7 +122,7 @@ async def list_my_reports(
 
 # --- Admin ---
 
-@router.get("/admin/content-reports", response_model=List[ReportOut])
+@router.get("/admin/content-reports", response_model=List[AdminReportOut])
 async def admin_list_reports(
     status: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
@@ -123,7 +132,74 @@ async def admin_list_reports(
     if status:
         q = q.where(ContentReport.status == status)
     rows = (await db.execute(q)).scalars().all()
-    return rows
+
+    # Enriquece com username + preview do alvo
+    user_ids = {r.user_id for r in rows}
+    users_map: dict[int, str] = {}
+    if user_ids:
+        users = (await db.execute(
+            select(User.id, User.username).where(User.id.in_(user_ids))
+        )).all()
+        users_map = {uid: uname for uid, uname in users}
+
+    q_ids = {r.question_id for r in rows if r.question_id}
+    m_ids = {r.material_id for r in rows if r.material_id}
+    r_ids = {r.redacao_id for r in rows if r.redacao_id}
+
+    q_preview: dict[int, str] = {}
+    if q_ids:
+        rows_q = (await db.execute(
+            select(GeneratedQuestion.id, GeneratedQuestion.enunciado).where(GeneratedQuestion.id.in_(q_ids))
+        )).all()
+        q_preview = {qid: (enu or "")[:200] for qid, enu in rows_q}
+    m_preview: dict[int, str] = {}
+    if m_ids:
+        rows_m = (await db.execute(
+            select(StudyMaterial.id, StudyMaterial.conteudo_md).where(StudyMaterial.id.in_(m_ids))
+        )).all()
+        m_preview = {mid: (md or "")[:200] for mid, md in rows_m}
+    r_preview: dict[int, str] = {}
+    if r_ids:
+        rows_r = (await db.execute(
+            select(Redacao.id, Redacao.tema_titulo_snapshot).where(Redacao.id.in_(r_ids))
+        )).all()
+        r_preview = {rid: (tema or "")[:200] for rid, tema in rows_r}
+
+    def _preview(r: ContentReport) -> Optional[str]:
+        if r.question_id and r.question_id in q_preview:
+            return q_preview[r.question_id]
+        if r.material_id and r.material_id in m_preview:
+            return m_preview[r.material_id]
+        if r.redacao_id and r.redacao_id in r_preview:
+            return r_preview[r.redacao_id]
+        return None
+
+    return [
+        AdminReportOut(
+            id=r.id, target_type=r.target_type,
+            question_id=r.question_id, material_id=r.material_id, redacao_id=r.redacao_id,
+            categoria=r.categoria, descricao=r.descricao,
+            status=r.status, nota_admin=r.nota_admin,
+            criado_em=r.criado_em, resolvido_em=r.resolvido_em,
+            user_id=r.user_id, username=users_map.get(r.user_id),
+            concurso_id=r.concurso_id,
+            target_preview=_preview(r),
+        )
+        for r in rows
+    ]
+
+
+@router.get("/admin/content-reports/count")
+async def admin_count_reports(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_admin_user),
+):
+    """Quantidade de reports abertos (badge no nav)."""
+    from sqlalchemy import func
+    n = (await db.execute(
+        select(func.count(ContentReport.id)).where(ContentReport.status == "aberto")
+    )).scalar() or 0
+    return {"abertos": int(n)}
 
 
 @router.put("/admin/content-reports/{report_id}/resolve", response_model=ReportOut)

@@ -79,6 +79,7 @@ export const getPlano = () => api.get('/plano')
 export const reportContent = (data) => api.post('/content-reports', data)
 export const listMyReports = () => api.get('/content-reports/me')
 export const adminListReports = (status) => api.get('/admin/content-reports', { params: status ? { status } : {} })
+export const adminCountReports = () => api.get('/admin/content-reports/count')
 export const adminResolveReport = (id, status, nota_admin) =>
   api.put(`/admin/content-reports/${id}/resolve`, { status, nota_admin })
 
