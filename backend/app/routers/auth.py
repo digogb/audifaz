@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 import re
 
 TRIAL_DAYS = 7
-TERMOS_VERSAO_ATUAL = "2026-05-19"
+TERMOS_VERSAO_ATUAL = "2026-05-20"
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 

@@ -16,24 +16,53 @@ const BRAND_META = {
   },
 }
 
+const VALID_BRANDS = Object.keys(BRAND_META)
+const STORAGE_KEY = 'audifaz_brand'
+const OVERRIDE_KEY = 'audifaz_brand_override'
+
+/** Lê `?brand=` da URL na primeira render e persiste como override.
+ * O override sobrescreve a detecção via Host: até ser limpo com `?brand=auto`. */
+function readQueryOverride() {
+  if (typeof window === 'undefined') return null
+  const params = new URLSearchParams(window.location.search)
+  const v = params.get('brand')
+  if (v === 'auto') {
+    localStorage.removeItem(OVERRIDE_KEY)
+    return null
+  }
+  if (v && VALID_BRANDS.includes(v)) {
+    localStorage.setItem(OVERRIDE_KEY, v)
+    return v
+  }
+  return localStorage.getItem(OVERRIDE_KEY) || null
+}
+
 export function BrandProvider({ children }) {
-  const [brand, setBrand] = useState(() => localStorage.getItem('audifaz_brand') || 'audifaz')
-  const [loading, setLoading] = useState(true)
+  // Override > último brand detectado > default
+  const override = typeof window !== 'undefined' ? readQueryOverride() : null
+  const initial = override || localStorage.getItem(STORAGE_KEY) || 'audifaz'
+  const [brand, setBrand] = useState(initial)
+  const [loading, setLoading] = useState(!override)
 
   useEffect(() => {
+    if (override) {
+      // override força — não precisa perguntar pro backend
+      localStorage.setItem(STORAGE_KEY, override)
+      return
+    }
     api.getCurrentBrand()
       .then(r => {
         const b = r.data?.brand || 'audifaz'
-        localStorage.setItem('audifaz_brand', b)
+        localStorage.setItem(STORAGE_KEY, b)
         setBrand(b)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, []) // eslint-disable-line
 
   const meta = BRAND_META[brand] || BRAND_META.audifaz
   return (
-    <BrandContext.Provider value={{ brand, meta, loading }}>
+    <BrandContext.Provider value={{ brand, meta, loading, hasOverride: !!override }}>
       {children}
     </BrandContext.Provider>
   )

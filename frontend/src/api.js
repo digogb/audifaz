@@ -5,6 +5,9 @@ const api = axios.create({ baseURL: '/api' })
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('audifaz_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
+  // Override de brand persistido pelo BrandProvider; o backend já aceita X-Brand
+  const brandOverride = localStorage.getItem('audifaz_brand_override')
+  if (brandOverride) config.headers['X-Brand'] = brandOverride
   return config
 })
 

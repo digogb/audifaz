@@ -87,7 +87,7 @@ export default function Landing() {
           <h3 className="font-heading text-lg font-bold text-primary">O que está incluso no trial</h3>
           <ul className="space-y-1.5">
             {[
-              'Material diário gerado por IA (Claude Sonnet 4.6)',
+              'Material diário gerado por IA (Claude)',
               'Questões classificadas por banca e por bloco temático',
               'Correção de redação ilimitada nos 7 dias',
               'Podcast diário (RSS privado) para revisão no trajeto',
