@@ -243,10 +243,16 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
 - Comentário explicando o raciocínio e por que cada alternativa errada está errada
 - O comentário deve ser AUTOCONSISTENTE com o gabarito declarado"""
 
-    # Ordem dos blocos do system: do mais estável (cacheável entre concursos) para o mais variável
+    # Ordem dos blocos do system: do mais estável (cacheável entre concursos) para o mais variável.
+    # Anthropic limita a 4 cache_control markers; cada marker cacheia TUDO até ele.
+    # Estratégia: marcamos apenas o ÚLTIMO bloco de cada camada lógica:
+    #   1. universal (BASE + METODOLOGIA + ACCURACY) → marker em _ACCURACY_CLAUSE
+    #   2. por banca (examples)                       → marker em examples
+    #   3. por concurso (perfil)                      → marker em perfil
+    # Total: 3 markers, dentro do limite de 4.
     system_blocks = [
-        {"type": "text", "text": _BASE_SYSTEM, "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": _FCC_METHODOLOGY, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": _BASE_SYSTEM},
+        {"type": "text", "text": _FCC_METHODOLOGY},
         {"type": "text", "text": _ACCURACY_CLAUSE, "cache_control": {"type": "ephemeral"}},
     ]
     examples_block = _fmt_examples_block(concurso.banca, examples)
