@@ -2,7 +2,7 @@ import os
 import bcrypt
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,6 +57,64 @@ async def get_admin_user(current_user: User = Depends(get_current_user)) -> User
     if not is_admin(current_user):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Apenas o admin pode executar esta ação")
     return current_user
+
+
+async def require_active_subscription(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Bloqueia ações premium se o usuário não tem assinatura ativa nem é interno.
+
+    Considera ativa: trial dentro do prazo, ativa não-expirada, ou is_internal=True.
+    """
+    if current_user.is_internal:
+        return current_user
+
+    # Importa aqui para evitar ciclo
+    from .models import Subscription, Concurso
+    if not current_user.concurso_atual_id:
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Sem concurso selecionado")
+    concurso = await db.get(Concurso, current_user.concurso_atual_id)
+    if not concurso or not concurso.requer_assinatura:
+        return current_user  # concurso gratuito (audifaz)
+
+    sub = (await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == current_user.id,
+            Subscription.concurso_id == current_user.concurso_atual_id,
+        )
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Assinatura inexistente")
+
+    now = datetime.utcnow()
+    if sub.status == "ativa":
+        if sub.expira_em and sub.expira_em < now:
+            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Assinatura expirada")
+        return current_user
+    if sub.status == "trial" and sub.trial_ate and sub.trial_ate >= now:
+        return current_user
+    raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Assinatura inativa")
+
+
+def get_current_brand(request: Request) -> str:
+    """Resolve a brand pelo Host header, com fallback para query/header explícito.
+
+    Hostnames conhecidos:
+      - anajud.rglabs.tech / anajud.*   → anajud
+      - audifaz.* / qualquer outro      → audifaz
+
+    Override via header 'X-Brand' (útil em dev/local) ou env DEFAULT_BRAND.
+    """
+    forced = request.headers.get("x-brand")
+    if forced and forced in ("audifaz", "anajud"):
+        return forced
+    host = (request.headers.get("host") or "").lower()
+    if host.startswith("anajud.") or "anajud" in host.split(":", 1)[0].split("."):
+        return "anajud"
+    if host.startswith("audifaz.") or "audifaz" in host.split(":", 1)[0].split("."):
+        return "audifaz"
+    return os.environ.get("DEFAULT_BRAND", "audifaz")
 
 
 async def get_current_concurso(

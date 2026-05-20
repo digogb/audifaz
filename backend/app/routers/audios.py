@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_admin_user, get_current_user, get_current_concurso
+from ..auth import get_admin_user, get_current_user, get_current_concurso, require_active_subscription
 from ..db import get_db
 from ..models import MaterialAudio, StudyDay, StudyMaterial, User, Week, Phase, Concurso
 from ..schemas import MaterialAudioOut, PodcastTokenOut
@@ -71,6 +71,7 @@ async def trigger_audio(
     day_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_admin_user),
+    _: User = Depends(require_active_subscription),
     concurso: Concurso = Depends(get_current_concurso),
 ):
     owns = await db.execute(

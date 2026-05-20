@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X, Settings, ChevronDown, Target, PenLine } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useConcurso } from '../contexts/ConcursoContext'
+import { useBrand } from '../contexts/BrandContext'
 
 const nav = [
   { to: '/', label: 'Hoje', icon: BookOpen },
@@ -62,7 +63,19 @@ function ConcursoSwitcher() {
 
 export default function Layout({ children }) {
   const { username, logout } = useAuth()
+  const { meta: brand } = useBrand()
   const [open, setOpen] = useState(false)
+
+  // Renderiza o nome da brand com a sílaba final em accent (mantém estilo "AudiFaz")
+  function Wordmark() {
+    const name = brand?.nome || 'AudiFaz'
+    const split = Math.max(2, Math.floor(name.length / 2))
+    return (
+      <span className="font-heading font-semibold text-primary tracking-tight text-sm">
+        {name.slice(0, split)}<span className="text-accent-text">{name.slice(split)}</span>
+      </span>
+    )
+  }
 
   return (
     <div className="relative min-h-screen flex flex-col">
@@ -70,9 +83,7 @@ export default function Layout({ children }) {
         <div className="max-w-5xl mx-auto">
           <div className="surface-card flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3">
             <div className="flex items-center gap-3">
-              <span className="font-heading font-semibold text-primary tracking-tight text-sm">
-                Audi<span className="text-accent-text">Faz</span>
-              </span>
+              <Wordmark />
               <ConcursoSwitcher />
             </div>
 

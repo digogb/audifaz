@@ -199,5 +199,8 @@ class ConcursoOut(BaseModel):
     descricao: Optional[str] = None
     edital_url: Optional[str] = None
     theme_slug: str = "audifaz"
+    brand: str = "audifaz"
+    requer_assinatura: bool = False
+    preco_cents: Optional[int] = None
     ativo: bool
     atual: bool = False

@@ -5,7 +5,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..auth import get_current_user, get_admin_user
+from ..auth import get_current_user, get_admin_user, get_current_brand
 from ..db import get_db
 from ..models import Concurso, UserConcurso, User, BancaExample
 from ..schemas import ConcursoOut
@@ -76,13 +76,28 @@ async def list_my_concursos(
 
 
 @router.get("/concursos/disponiveis", response_model=List[ConcursoOut])
-async def list_public_concursos(db: AsyncSession = Depends(get_db)):
-    """Catálogo público (sem auth) para landing/signup."""
+async def list_public_concursos(
+    db: AsyncSession = Depends(get_db),
+    brand: str = Depends(get_current_brand),
+):
+    """Catálogo público (sem auth) para landing/signup, filtrado pela brand do host."""
     result = await db.execute(
-        select(Concurso).where(Concurso.publico == True, Concurso.ativo == True).order_by(Concurso.nome)
+        select(Concurso)
+        .where(
+            Concurso.publico == True,
+            Concurso.ativo == True,
+            Concurso.brand == brand,
+        )
+        .order_by(Concurso.nome)
     )
     concursos = result.scalars().all()
     return [ConcursoOut.model_validate(c) for c in concursos]
+
+
+@router.get("/brand")
+async def current_brand(brand: str = Depends(get_current_brand)):
+    """Expõe a brand inferida pelo Host (público, útil pro frontend antes do login)."""
+    return {"brand": brand}
 
 
 @router.post("/admin/concursos", response_model=ConcursoOut, status_code=201)

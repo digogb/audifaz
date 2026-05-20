@@ -8,7 +8,7 @@ from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio, ConcursoContext
-from ..auth import get_current_user, get_admin_user, get_current_concurso
+from ..auth import get_current_user, get_admin_user, get_current_concurso, require_active_subscription
 
 router = APIRouter(prefix="/api/days", tags=["materials"])
 
@@ -222,6 +222,7 @@ async def generate_material(
     model: str = Query("claude-sonnet-4-6"),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_admin_user),
+    __: User = Depends(require_active_subscription),
     concurso: Concurso = Depends(get_current_concurso),
 ):
     if model not in ("claude-sonnet-4-6", "claude-opus-4-7"):

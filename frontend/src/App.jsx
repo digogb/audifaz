@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { BrandProvider } from './contexts/BrandContext'
 import { ConcursoProvider } from './contexts/ConcursoContext'
 import { ThemeProvider } from './contexts/ThemeProvider'
 import Layout from './components/Layout'
@@ -11,6 +12,9 @@ import Mocks from './pages/Mocks'
 import Config from './pages/Config'
 import Metricas from './pages/Metricas'
 import Redacao from './pages/Redacao'
+import Signup from './pages/Signup'
+import Landing from './pages/Landing'
+import Billing from './pages/Billing'
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth()
@@ -21,6 +25,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/landing" element={<Landing />} />
+      <Route path="/billing" element={<ProtectedRoute><Layout><Billing /></Layout></ProtectedRoute>} />
       <Route path="/" element={<ProtectedRoute><Layout><Today /></Layout></ProtectedRoute>} />
       <Route path="/erros" element={<ProtectedRoute><Layout><Errors /></Layout></ProtectedRoute>} />
       <Route path="/progresso" element={<ProtectedRoute><Layout><Progress /></Layout></ProtectedRoute>} />
@@ -36,13 +43,15 @@ function AppRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ConcursoProvider>
-          <ThemeProvider>
-            <AppRoutes />
-          </ThemeProvider>
-        </ConcursoProvider>
-      </AuthProvider>
+      <BrandProvider>
+        <AuthProvider>
+          <ConcursoProvider>
+            <ThemeProvider>
+              <AppRoutes />
+            </ThemeProvider>
+          </ConcursoProvider>
+        </AuthProvider>
+      </BrandProvider>
     </BrowserRouter>
   )
 }

@@ -1,12 +1,25 @@
+from datetime import datetime, timedelta
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db
-from ..models import User
+from ..models import User, Concurso, UserConcurso, Subscription
 from ..schemas import LoginRequest, TokenOut
-from ..auth import hash_password, verify_password, create_token, get_current_user, get_admin_user, is_admin
+from ..auth import (
+    hash_password, verify_password, create_token, get_current_user,
+    get_admin_user, get_current_brand, is_admin,
+)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+TRIAL_DAYS = 7
+
+
+class SignupRequest(BaseModel):
+    username: str
+    password: str
+    concurso_slug: str | None = None  # opcional: se omitir, pega 1º público da brand
 
 
 @router.post("/login", response_model=TokenOut)
@@ -34,10 +47,63 @@ async def register(
     return TokenOut(token=create_token(user.id, user.username), username=user.username)
 
 
+@router.post("/signup", response_model=TokenOut, status_code=201)
+async def signup(
+    body: SignupRequest,
+    db: AsyncSession = Depends(get_db),
+    brand: str = Depends(get_current_brand),
+):
+    """Signup público. Cria User + UserConcurso + Subscription(trial 7 dias).
+    O concurso é resolvido pelo slug ou (na ausência) pelo 1º público da brand do host."""
+    username = body.username.strip()
+    if len(username) < 3 or len(body.password) < 6:
+        raise HTTPException(400, "Usuário ou senha muito curtos")
+    if (await db.execute(select(User).where(User.username == username))).scalar_one_or_none():
+        raise HTTPException(409, "Usuário já existe")
+
+    # Resolve concurso por brand do host (+ slug se fornecido)
+    q = select(Concurso).where(
+        Concurso.brand == brand, Concurso.ativo == True, Concurso.publico == True,
+    )
+    if body.concurso_slug:
+        q = q.where(Concurso.slug == body.concurso_slug)
+    q = q.order_by(Concurso.id)
+    concurso = (await db.execute(q)).scalars().first()
+    if not concurso:
+        raise HTTPException(400, "Nenhum concurso público disponível para esta brand")
+
+    user = User(username=username, password_hash=hash_password(body.password))
+    db.add(user)
+    await db.flush()
+    db.add(UserConcurso(user_id=user.id, concurso_id=concurso.id, ativo=True))
+    user.concurso_atual_id = concurso.id
+
+    # Cria assinatura: se o concurso requer, entra em trial; senão, ativa direto
+    now = datetime.utcnow()
+    if concurso.requer_assinatura:
+        sub = Subscription(
+            user_id=user.id, concurso_id=concurso.id,
+            status="trial", tipo="single",
+            valor_cents=concurso.preco_cents,
+            criado_em=now, trial_ate=now + timedelta(days=TRIAL_DAYS),
+        )
+    else:
+        sub = Subscription(
+            user_id=user.id, concurso_id=concurso.id,
+            status="ativa", tipo="single",
+            valor_cents=0, criado_em=now, paid_at=now,
+        )
+    db.add(sub)
+    await db.commit()
+    await db.refresh(user)
+    return TokenOut(token=create_token(user.id, user.username), username=user.username)
+
+
 @router.get("/me")
 async def me(current_user: User = Depends(get_current_user)):
     return {
         "id": current_user.id,
         "username": current_user.username,
         "is_admin": is_admin(current_user),
+        "is_internal": current_user.is_internal,
     }

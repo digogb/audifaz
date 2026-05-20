@@ -32,6 +32,9 @@ class Concurso(Base):
     edital_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     prompt_extra: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     theme_slug: Mapped[str] = mapped_column(String(40), default="audifaz")
+    brand: Mapped[str] = mapped_column(String(40), default="audifaz", index=True)
+    requer_assinatura: Mapped[bool] = mapped_column(Boolean, default=False)
+    preco_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     publico: Mapped[bool] = mapped_column(Boolean, default=False)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -216,6 +219,25 @@ class MockExamResult(Base):
     total: Mapped[int]
     bloco_id: Mapped[Optional[int]] = mapped_column(ForeignKey("blocos.id"), nullable=True, index=True)
     exam: Mapped["MockExam"] = relationship(back_populates="results")
+
+
+class Subscription(Base):
+    """Assinatura/compra única por usuário+concurso."""
+    __tablename__ = "subscriptions"
+    __table_args__ = (UniqueConstraint("user_id", "concurso_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    concurso_id: Mapped[int] = mapped_column(ForeignKey("concursos.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="trial")  # trial|ativa|expirada|cancelada
+    tipo: Mapped[str] = mapped_column(String(20), default="single")   # single|mensal (futuro)
+    valor_cents: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    payment_provider: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)  # mercado_pago|manual
+    payment_external_id: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    trial_ate: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    paid_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    expira_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    cancelada_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
 class BancaExample(Base):

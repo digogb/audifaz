@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import claude_client
-from ..auth import get_admin_user, get_current_user, get_current_concurso
+from ..auth import get_admin_user, get_current_user, get_current_concurso, require_active_subscription
 from ..claude_client import ConcursoContext, _calc_cost
 from ..db import AsyncSessionLocal, get_db
 from ..models import Concurso, Redacao, RedacaoTema, User
@@ -233,7 +233,7 @@ async def submit_redacao(
     body: RedacaoSubmit,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_active_subscription),
     concurso: Concurso = Depends(get_current_concurso),
 ):
     tema = await db.get(RedacaoTema, body.tema_id)

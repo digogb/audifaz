@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useConcurso } from './ConcursoContext'
+import { useBrand } from './BrandContext'
 import { resolveTheme, DEFAULT_THEME } from '../themes'
 
 const CACHE_KEY = 'audifaz_theme_slug'
@@ -30,6 +31,7 @@ function ensureFontLinks(theme) {
  */
 export function ThemeProvider({ children }) {
   const { current } = useConcurso()
+  const { meta: brandMeta } = useBrand()
   const appliedRef = useRef(null)
 
   // Aplica cached theme antes da primeira render
@@ -41,13 +43,14 @@ export function ThemeProvider({ children }) {
   }
 
   useEffect(() => {
-    const slug = current?.theme_slug || DEFAULT_THEME
+    // Prioridade: concurso atual > brand do host > default
+    const slug = current?.theme_slug || brandMeta?.theme || DEFAULT_THEME
     if (slug === appliedRef.current) return
     const theme = applyTheme(slug)
     ensureFontLinks(theme)
     localStorage.setItem(CACHE_KEY, slug)
     appliedRef.current = slug
-  }, [current?.theme_slug])
+  }, [current?.theme_slug, brandMeta?.theme])
 
   return children
 }
