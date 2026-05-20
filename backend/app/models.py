@@ -58,6 +58,22 @@ class Phase(Base):
     weeks: Mapped[List["Week"]] = relationship(back_populates="phase", order_by="Week.numero")
 
 
+class Bloco(Base):
+    """Bloco temático (Governança, Segurança, Direito etc.) com peso e meta."""
+    __tablename__ = "blocos"
+    __table_args__ = (UniqueConstraint("concurso_id", "slug"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    concurso_id: Mapped[int] = mapped_column(ForeignKey("concursos.id"), index=True)
+    slug: Mapped[str] = mapped_column(String(60))
+    nome: Mapped[str] = mapped_column(String(120))
+    peso: Mapped[float] = mapped_column(Float, default=1.0)
+    prioridade: Mapped[str] = mapped_column(String(10), default="media")  # alta|media|baixa
+    alocacao_pct: Mapped[float] = mapped_column(Float, default=0.0)
+    meta_acerto_pct: Mapped[float] = mapped_column(Float, default=70.0)
+    ordem: Mapped[int] = mapped_column(default=0)
+    keywords: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # csv para heurística
+
+
 class Week(Base):
     __tablename__ = "weeks"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -91,6 +107,7 @@ class Topic(Base):
     ordem: Mapped[int] = mapped_column(default=0)
     concluido: Mapped[bool] = mapped_column(Boolean, default=False)
     observacao: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    bloco_id: Mapped[Optional[int]] = mapped_column(ForeignKey("blocos.id"), nullable=True, index=True)
     study_day: Mapped["StudyDay"] = relationship(back_populates="topics")
 
 
@@ -125,6 +142,7 @@ class GeneratedQuestion(Base):
     disciplina: Mapped[str] = mapped_column(String(100))
     dificuldade: Mapped[str] = mapped_column(String(20), default="medio")
     ordem: Mapped[int] = mapped_column(default=0)
+    bloco_id: Mapped[Optional[int]] = mapped_column(ForeignKey("blocos.id"), nullable=True, index=True)
     material: Mapped["StudyMaterial"] = relationship(back_populates="questions")
 
 
@@ -196,6 +214,7 @@ class MockExamResult(Base):
     disciplina: Mapped[str] = mapped_column(String(100))
     acertos: Mapped[int]
     total: Mapped[int]
+    bloco_id: Mapped[Optional[int]] = mapped_column(ForeignKey("blocos.id"), nullable=True, index=True)
     exam: Mapped["MockExam"] = relationship(back_populates="results")
 
 

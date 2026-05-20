@@ -4,7 +4,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
-from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso, BancaExample
+from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso, BancaExample, Bloco
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio, ConcursoContext
@@ -61,6 +61,14 @@ async def _concurso_for_day(db: AsyncSession, day_id: int) -> Concurso | None:
         .join(StudyDay, StudyDay.week_id == Week.id)
         .where(StudyDay.id == day_id)
     )).scalar_one_or_none()
+
+
+async def _load_blocos(db: AsyncSession, concurso_id: int) -> dict[str, int]:
+    """Retorna {slug: bloco_id} para passar como enum ao Claude."""
+    rows = (await db.execute(
+        select(Bloco.slug, Bloco.id).where(Bloco.concurso_id == concurso_id).order_by(Bloco.ordem)
+    )).all()
+    return {slug: bid for slug, bid in rows}
 
 
 @router.get("/{day_id}/material", response_model=StudyMaterialOut)
@@ -160,8 +168,11 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             if not concurso:
                 raise RuntimeError(f"concurso {concurso_id} sumiu")
             examples = await _load_examples(db_pre, concurso.banca)
+            bloco_map = await _load_blocos(db_pre, concurso_id)
             ctx = _to_ctx(concurso)
-        content_md, questions_data, usage_dict = await claude_client.generate_material(topics, ctx, examples, model)
+        content_md, questions_data, usage_dict = await claude_client.generate_material(
+            topics, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
+        )
         validation_flags = await claude_client.validate_material(content_md, questions_data)
 
         async with AsyncSessionLocal() as db:
@@ -178,6 +189,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             material.error_msg = None
 
             for i, q in enumerate(questions_data):
+                slug = q.get("bloco_slug")
                 db.add(GeneratedQuestion(
                     study_material_id=material_id,
                     enunciado=q.get("enunciado", ""),
@@ -187,6 +199,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
                     disciplina=q.get("disciplina", ""),
                     dificuldade=q.get("dificuldade", "medio"),
                     ordem=i,
+                    bloco_id=bloco_map.get(slug) if slug else None,
                 ))
             await _enqueue_audio(db, material_id)
             await db.commit()
@@ -307,9 +320,12 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
         if not concurso:
             return
         examples = await _load_examples(db, concurso.banca)
+        bloco_map = await _load_blocos(db, concurso.id)
         ctx = _to_ctx(concurso)
 
-    content_md, questions_data, usage_dict = await claude_client.generate_material(topics, ctx, examples, model)
+    content_md, questions_data, usage_dict = await claude_client.generate_material(
+        topics, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
+    )
     validation_flags = await claude_client.validate_material(content_md, questions_data)
 
     async with AsyncSessionLocal() as db:
@@ -328,6 +344,7 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
         await db.flush()
 
         for i, q in enumerate(questions_data):
+            slug = q.get("bloco_slug")
             gq = GeneratedQuestion(
                 study_material_id=material.id,
                 enunciado=q.get("enunciado", ""),
@@ -337,6 +354,7 @@ async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
                 disciplina=q.get("disciplina", ""),
                 dificuldade=q.get("dificuldade", "medio"),
                 ordem=i,
+                bloco_id=bloco_map.get(slug) if slug else None,
             )
             db.add(gq)
 

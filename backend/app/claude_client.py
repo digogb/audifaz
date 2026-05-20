@@ -104,54 +104,45 @@ Quando você não tem certeza absoluta sobre:
 
 _BASE_SYSTEM = """Você é um assistente de estudos especializado em concursos públicos brasileiros."""
 
-_TOOL = {
-    "name": "registrar_questoes",
-    "description": "Registra as questões de múltipla escolha geradas para o dia de estudo, no estilo da banca com cenário realista.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "questoes": {
-                "type": "array",
-                "description": "Lista de questões estilo da banca",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "enunciado": {
-                            "type": "string",
-                            "description": "Enunciado completo com contexto profissional realista"
-                        },
-                        "alternativas": {
-                            "type": "object",
-                            "properties": {
-                                "A": {"type": "string"},
-                                "B": {"type": "string"},
-                                "C": {"type": "string"},
-                                "D": {"type": "string"},
-                                "E": {"type": "string"}
-                            },
-                            "required": ["A", "B", "C", "D", "E"]
-                        },
-                        "gabarito": {
-                            "type": "string",
-                            "enum": ["A", "B", "C", "D", "E"]
-                        },
-                        "comentario": {
-                            "type": "string",
-                            "description": "Explica o gabarito e por que cada alternativa errada está errada"
-                        },
-                        "disciplina": {"type": "string"},
-                        "dificuldade": {
-                            "type": "string",
-                            "enum": ["facil", "medio", "dificil"]
-                        }
-                    },
-                    "required": ["enunciado", "alternativas", "gabarito", "comentario", "disciplina", "dificuldade"]
-                }
-            }
+def _build_tool(bloco_slugs: list[str]) -> dict:
+    schema_props = {
+        "enunciado": {"type": "string", "description": "Enunciado completo com contexto profissional realista"},
+        "alternativas": {
+            "type": "object",
+            "properties": {
+                "A": {"type": "string"}, "B": {"type": "string"}, "C": {"type": "string"},
+                "D": {"type": "string"}, "E": {"type": "string"},
+            },
+            "required": ["A", "B", "C", "D", "E"],
         },
-        "required": ["questoes"]
+        "gabarito": {"type": "string", "enum": ["A", "B", "C", "D", "E"]},
+        "comentario": {"type": "string", "description": "Explica o gabarito e por que cada alternativa errada está errada"},
+        "disciplina": {"type": "string"},
+        "dificuldade": {"type": "string", "enum": ["facil", "medio", "dificil"]},
     }
-}
+    required = ["enunciado", "alternativas", "gabarito", "comentario", "disciplina", "dificuldade"]
+    if bloco_slugs:
+        schema_props["bloco_slug"] = {
+            "type": "string",
+            "enum": bloco_slugs,
+            "description": "Slug do bloco temático ao qual a questão pertence (use 'outros' se nenhum se aplicar).",
+        }
+        required.append("bloco_slug")
+    return {
+        "name": "registrar_questoes",
+        "description": "Registra as questões de múltipla escolha geradas para o dia de estudo, no estilo da banca com cenário realista.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "questoes": {
+                    "type": "array",
+                    "description": "Lista de questões estilo da banca",
+                    "items": {"type": "object", "properties": schema_props, "required": required},
+                },
+            },
+            "required": ["questoes"],
+        },
+    }
 
 _VALIDATION_TOOL = {
     "name": "registrar_flags",
@@ -223,6 +214,7 @@ def _build_params(
     model: str,
     concurso: ConcursoContext,
     examples: list[dict],
+    bloco_slugs: list[str] | None = None,
 ) -> dict:
     user_message = f"""Gere o material de estudo focado **exclusivamente neste tópico**:
 
@@ -271,7 +263,7 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
     })
 
     tools = [
-        _TOOL,
+        _build_tool(bloco_slugs or []),
         {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
     ]
 
@@ -294,9 +286,10 @@ async def _generate_for_topic(
     model: str,
     concurso: ConcursoContext,
     examples: list[dict],
+    bloco_slugs: list[str] | None = None,
 ) -> tuple[str, list, dict]:
     """Generate material for a single topic. Returns (content_md, questions, usage)."""
-    params = _build_params(topic, questions_count, model, concurso, examples)
+    params = _build_params(topic, questions_count, model, concurso, examples, bloco_slugs)
     response = await _client.messages.create(**params)
 
     content_md = ""
@@ -333,6 +326,7 @@ async def generate_material(
     concurso: ConcursoContext,
     examples: list[dict],
     model: str = "claude-sonnet-4-6",
+    bloco_slugs: list[str] | None = None,
 ) -> tuple[str, list, dict]:
     """Generate material per-topic in parallel."""
     if not topics:
@@ -342,7 +336,7 @@ async def generate_material(
     questions_per_topic = max(5, min(15, math.ceil(15 / n)))
 
     results = await asyncio.gather(
-        *[_generate_for_topic(t, questions_per_topic, model, concurso, examples) for t in topics]
+        *[_generate_for_topic(t, questions_per_topic, model, concurso, examples, bloco_slugs) for t in topics]
     )
 
     full_md_parts: list[str] = []

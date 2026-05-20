@@ -65,6 +65,13 @@ export const generateAudio = (dayId) => api.post(`/days/${dayId}/audio/generate`
 export const getPodcastFeed = () => api.get('/podcast/me')
 export const regeneratePodcastToken = () => api.post('/podcast/regenerate-token')
 
+// Blocos / Metricas
+export const getBlocos = () => api.get('/blocos')
+export const getMetricasBlocos = () => api.get('/metricas/blocos')
+export const adminCreateBloco = (data) => api.post('/admin/blocos', data)
+export const adminUpdateBloco = (id, data) => api.put(`/admin/blocos/${id}`, data)
+export const adminDeleteBloco = (id) => api.delete(`/admin/blocos/${id}`)
+
 // Concursos
 export const getConcursos = () => api.get('/concursos')
 export const getConcursosPublicos = () => api.get('/concursos/disponiveis')

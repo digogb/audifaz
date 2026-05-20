@@ -262,7 +262,174 @@ async def migrate(db: AsyncSession):
         if count == 0:
             await _seed_banca_examples_from_json(db)
 
+    # blocos.* (idempotente)
+    if await _table_exists(db, "blocos"):
+        await _seed_blocos_if_needed(db)
+
+    # topics.bloco_id
+    if await _table_exists(db, "topics") and not await _column_exists(db, "topics", "bloco_id"):
+        await db.execute(text("ALTER TABLE topics ADD COLUMN bloco_id INTEGER REFERENCES blocos(id)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS ix_topics_bloco_id ON topics(bloco_id)"))
+
+    # generated_questions.bloco_id
+    if await _table_exists(db, "generated_questions") and not await _column_exists(db, "generated_questions", "bloco_id"):
+        await db.execute(text("ALTER TABLE generated_questions ADD COLUMN bloco_id INTEGER REFERENCES blocos(id)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS ix_generated_questions_bloco_id ON generated_questions(bloco_id)"))
+
+    # mock_exam_results.bloco_id
+    if await _table_exists(db, "mock_exam_results") and not await _column_exists(db, "mock_exam_results", "bloco_id"):
+        await db.execute(text("ALTER TABLE mock_exam_results ADD COLUMN bloco_id INTEGER REFERENCES blocos(id)"))
+        await db.execute(text("CREATE INDEX IF NOT EXISTS ix_mock_exam_results_bloco_id ON mock_exam_results(bloco_id)"))
+
+    # Backfill: classificar topics/questions/results existentes pelos blocos via keywords
+    if await _table_exists(db, "blocos"):
+        await _backfill_blocos(db)
+
     await db.commit()
+
+
+# Blocos default por concurso. Slugs estáveis; nomes/pesos editáveis depois via admin.
+# Extraídos da seção 7 do plano TJCE e do plano SEFAZ.
+_DEFAULT_BLOCOS = {
+    "sefaz-ce-2026": [
+        # TI técnico
+        ("ti-governanca", "Governança e Processos (ITIL/COBIT/PMBOK)", 3.0, "alta", 15.0, 80.0, "itil,cobit,pmbok,governanca,governança,cmmi,togaf"),
+        ("ti-engenharia", "Engenharia de Software (UML/BPMN/Ágeis/Testes)", 2.5, "media", 8.0, 75.0, "uml,bpmn,scrum,kanban,xp,tdd,bdd,refatoração,solid,gof,padrões,testes,requisitos"),
+        ("ti-seguranca", "Segurança da Informação (ISO 27k/OWASP/LGPD)", 3.0, "alta", 12.0, 80.0, "iso 27,owasp,zero trust,siem,criptografia,pki,oauth,oidc,lgpd,sgsi,nist,seg info"),
+        ("ti-dados", "Banco de Dados e DW (SQL/PostgreSQL/Oracle/NoSQL)", 2.0, "media", 8.0, 75.0, "sql,banco,postgres,oracle,nosql,mongodb,redis,cassandra,etl,dw,olap,data lake,kafka,window"),
+        ("ti-arquitetura", "Arquitetura, DevOps e Cloud", 2.0, "media", 7.0, 80.0, "microsserviços,microservices,ddd,hexagonal,kubernetes,docker,ci/cd,cloud,aws,azure,gcp,iac,terraform"),
+        ("ti-prog-web", "Programação e Web (Java/Python/JS/REST)", 1.5, "baixa", 4.0, 85.0, "java,python,javascript,react,angular,vue,node,rest,api,html,css,git"),
+        ("ti-so-redes", "Sistemas Operacionais e Redes", 1.5, "media", 4.0, 70.0, "linux,unix,windows,redes,tcp,udp,osi,dns,dhcp,vpn,firewall,roteamento"),
+        # Direito/legislação
+        ("dir-tributario", "Direito Tributário (CTN, Reforma)", 3.0, "alta", 10.0, 75.0, "tributário,tributario,ctn,icms,issqn,iss,iptu,ipva,reforma tributária,ibs,cbs"),
+        ("dir-constitucional", "Direito Constitucional", 2.0, "media", 6.0, 70.0, "constitucional,cf 88,art. 5,limpe,fundamentos,direitos sociais"),
+        ("dir-administrativo", "Direito Administrativo (8.112, 14.133, 8.429)", 2.0, "media", 6.0, 70.0, "administrativo,8.112,licitação,licitacao,14.133,improbidade,8.429,12.527,lai"),
+        ("contabilidade", "Contabilidade Geral e Pública", 2.0, "media", 6.0, 70.0, "contabil,contábil,balanço,mcasp,nbc,patrimônio,demonstrações"),
+        ("auditoria", "Auditoria", 1.5, "baixa", 3.0, 70.0, "auditoria,nbc ta,iso 19011,independência,parecer"),
+        # CG
+        ("portugues", "Língua Portuguesa", 1.0, "alta", 8.0, 80.0, "portugues,português,gramatica,sintaxe,crase,regência,redação"),
+        ("rlm", "Raciocínio Lógico-Matemático", 1.0, "media", 5.0, 70.0, "rlm,raciocinio,lógica,proposição,estatística,probabilidade,matemática"),
+        ("outros", "Outros / Não classificado", 0.5, "baixa", 0.0, 60.0, ""),
+    ],
+    "tjce-2026": [
+        # CE (peso 3 — onde mora o ouro)
+        ("ti-governanca", "Governança e Processos (ITIL/COBIT/PMBOK/CMMI/TOGAF)", 3.0, "alta", 18.0, 80.0, "itil,cobit,pmbok,governanca,governança,cmmi,mr-mps,togaf"),
+        ("ti-engenharia", "Engenharia de Software (UML/BPMN/Ágeis/Testes/ISO 25010)", 2.5, "alta", 8.0, 80.0, "uml,bpmn,scrum,kanban,xp,tdd,bdd,iso 25010,iso 12207,testes,requisitos,furps"),
+        ("ti-seguranca", "Segurança da Informação (ISO 27k/OWASP/LGPD/cripto)", 3.0, "alta", 10.0, 80.0, "iso 27,owasp,zero trust,siem,criptografia,pki,oauth,oidc,sgsi,nist,sso,mfa"),
+        ("ti-dados", "Banco de Dados (SQL/CTE/Window/DW/NoSQL)", 2.0, "media", 8.0, 80.0, "sql,banco,postgres,oracle,nosql,mongodb,etl,dw,olap,data lake,window,cte"),
+        ("ti-arquitetura", "Arquitetura, DevOps, Cloud e Stack PDPJ-Br", 2.0, "media", 12.0, 80.0, "microsserviços,microservices,ddd,hexagonal,kubernetes,docker,ci/cd,cloud,spring,eureka,zuul,keycloak,flyway,rancher,rabbitmq,pdpj"),
+        ("ti-prog-web", "Programação e Web (Java/Python/JS/REST/Git)", 1.5, "baixa", 4.0, 90.0, "java,python,javascript,react,angular,vue,node,rest,api,html,css,git,gitflow"),
+        ("ti-so-redes", "Sistemas Operacionais e Redes", 1.5, "media", 4.0, 70.0, "linux,redes,tcp,udp,osi,dns,dhcp,vpn,deadlock,paginação,escalonamento"),
+        # Normativos CNJ
+        ("normativos-cnj", "CNJ e PDPJ-Br (Res. 335/396/522, Portarias)", 3.0, "alta", 12.0, 85.0, "cnj,pdpj,moreq,resolução cnj,portaria cnj,335/2020,396/2021,522/2023,252/2020,253/2020,284/2021,131/2021,162/2021"),
+        # Leis gerais
+        ("lgpd-licitacao", "LGPD + Lei 14.133", 2.5, "alta", 6.0, 85.0, "lgpd,13.709,14.133,licitação,licitacao,tic,etp,tr,fiscalização,encarregado,dpo,anpd"),
+        # Legislação CE
+        ("leg-ce", "Legislação CE (Estatuto 9.826, Org. Jud. 16.397, PCD)", 2.0, "alta", 6.0, 80.0, "9.826,16.397,estatuto,organização judiciária,pcd,deficiência,csjt 386"),
+        # CG
+        ("portugues", "Língua Portuguesa", 1.0, "alta", 8.0, 80.0, "portugues,português,gramatica,sintaxe,crase,regência,redação,morfossintaxe"),
+        ("rlm", "Raciocínio Lógico-Matemático", 1.0, "media", 5.0, 75.0, "rlm,raciocinio,lógica,proposição,estatística,probabilidade,silogismo"),
+        ("redacao", "Redação dissertativa", 1.0, "media", 3.0, 75.0, "redação,dissertativo,tema,argumentação,coesão"),
+        ("outros", "Outros / Não classificado", 0.5, "baixa", 0.0, 60.0, ""),
+    ],
+}
+
+
+async def _seed_blocos_if_needed(db: AsyncSession):
+    """Cria blocos default por concurso, se ainda não houver nenhum para o concurso."""
+    rows = await db.execute(text("SELECT id, slug FROM concursos"))
+    for cid, cslug in rows.all():
+        count = (await db.execute(
+            text("SELECT COUNT(*) FROM blocos WHERE concurso_id = :cid"),
+            {"cid": cid},
+        )).scalar()
+        if count and count > 0:
+            continue
+        defaults = _DEFAULT_BLOCOS.get(cslug)
+        if not defaults:
+            continue
+        for ordem, (slug, nome, peso, prio, alloc, meta, kws) in enumerate(defaults):
+            await db.execute(
+                text("""
+                    INSERT OR IGNORE INTO blocos
+                        (concurso_id, slug, nome, peso, prioridade, alocacao_pct,
+                         meta_acerto_pct, ordem, keywords)
+                    VALUES (:cid, :slug, :nome, :peso, :prio, :alloc, :meta, :ordem, :kws)
+                """),
+                {"cid": cid, "slug": slug, "nome": nome, "peso": peso,
+                 "prio": prio, "alloc": alloc, "meta": meta, "ordem": ordem,
+                 "kws": kws},
+            )
+
+
+def _match_bloco(text_lower: str, blocos: list[tuple]) -> int | None:
+    """Recebe (id, slug, keywords) por bloco; retorna primeiro bloco cuja keyword aparece."""
+    for bid, slug, keywords in blocos:
+        if not keywords:
+            continue
+        for kw in keywords.split(","):
+            kw = kw.strip().lower()
+            if kw and kw in text_lower:
+                return bid
+    # Fallback: bloco "outros" se existir
+    for bid, slug, _ in blocos:
+        if slug == "outros":
+            return bid
+    return None
+
+
+async def _backfill_blocos(db: AsyncSession):
+    """Classifica topics/questions/results não-classificados via heurística de keywords."""
+    concursos = (await db.execute(text("SELECT id, slug FROM concursos"))).all()
+    for cid, cslug in concursos:
+        blocos = (await db.execute(
+            text("SELECT id, slug, keywords FROM blocos WHERE concurso_id = :cid ORDER BY ordem"),
+            {"cid": cid},
+        )).all()
+        if not blocos:
+            continue
+
+        # Topics ainda sem bloco
+        topics = (await db.execute(text("""
+            SELECT t.id, t.descricao FROM topics t
+            JOIN study_days d ON d.id = t.study_day_id
+            JOIN weeks w ON w.id = d.week_id
+            JOIN phases p ON p.id = w.phase_id
+            WHERE p.concurso_id = :cid AND t.bloco_id IS NULL
+        """), {"cid": cid})).all()
+        for tid, desc in topics:
+            bid = _match_bloco((desc or "").lower(), blocos)
+            if bid:
+                await db.execute(text("UPDATE topics SET bloco_id = :b WHERE id = :t"),
+                                 {"b": bid, "t": tid})
+
+        # Generated questions ainda sem bloco
+        questions = (await db.execute(text("""
+            SELECT q.id, q.enunciado, q.disciplina FROM generated_questions q
+            JOIN study_materials m ON m.id = q.study_material_id
+            JOIN study_days d ON d.id = m.study_day_id
+            JOIN weeks w ON w.id = d.week_id
+            JOIN phases p ON p.id = w.phase_id
+            WHERE p.concurso_id = :cid AND q.bloco_id IS NULL
+        """), {"cid": cid})).all()
+        for qid, enu, disc in questions:
+            text_blob = f"{disc or ''} {enu or ''}".lower()
+            bid = _match_bloco(text_blob, blocos)
+            if bid:
+                await db.execute(text("UPDATE generated_questions SET bloco_id = :b WHERE id = :q"),
+                                 {"b": bid, "q": qid})
+
+        # MockExamResults sem bloco
+        results = (await db.execute(text("""
+            SELECT r.id, r.disciplina FROM mock_exam_results r
+            JOIN mock_exams m ON m.id = r.mock_exam_id
+            WHERE m.concurso_id = :cid AND r.bloco_id IS NULL
+        """), {"cid": cid})).all()
+        for rid, disc in results:
+            bid = _match_bloco((disc or "").lower(), blocos)
+            if bid:
+                await db.execute(text("UPDATE mock_exam_results SET bloco_id = :b WHERE id = :r"),
+                                 {"b": bid, "r": rid})
 
 
 async def _seed_banca_examples_from_json(db: AsyncSession):

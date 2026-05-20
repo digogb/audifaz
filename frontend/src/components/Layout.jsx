@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X, Settings, ChevronDown } from 'lucide-react'
+import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X, Settings, ChevronDown, Target } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useConcurso } from '../contexts/ConcursoContext'
 
@@ -8,6 +8,7 @@ const nav = [
   { to: '/', label: 'Hoje', icon: BookOpen },
   { to: '/erros', label: 'Erros', icon: AlertCircle },
   { to: '/progresso', label: 'Progresso', icon: BarChart2 },
+  { to: '/metricas', label: 'Métricas', icon: Target },
   { to: '/simulados', label: 'Simulados', icon: FileText },
   { to: '/config', label: 'Config', icon: Settings },
 ]
