@@ -45,6 +45,19 @@ def _clean_alternativas(alts) -> dict:
     return {k.upper(): v for k, v in alts.items() if k.upper() in ("A", "B", "C", "D", "E")}
 
 
+def _salvage_comentario(comentario, alts) -> str:
+    """Se o comentário veio vazio mas o modelo o embutiu em alternativas['comentario'],
+    recupera-o antes de _clean_alternativas descartar a chave (senão perderíamos a
+    explicação — foi exatamente o que aconteceu com questões antigas)."""
+    if (comentario or "").strip():
+        return comentario
+    if isinstance(alts, dict):
+        emb = alts.get("comentario") or alts.get("Comentario")
+        if emb and emb.strip():
+            return emb.strip()
+    return comentario or ""
+
+
 async def _load_examples(
     db: AsyncSession, banca: str, limit: int = 12, seed: int | None = None
 ) -> list[dict]:
@@ -282,7 +295,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
                     enunciado=q.get("enunciado", ""),
                     alternativas=_clean_alternativas(q.get("alternativas", {})),
                     gabarito=q.get("gabarito", "A"),
-                    comentario=q.get("comentario", ""),
+                    comentario=_salvage_comentario(q.get("comentario", ""), q.get("alternativas", {})),
                     disciplina=q.get("disciplina", ""),
                     dificuldade=q.get("dificuldade", "medio"),
                     ordem=i,
@@ -465,9 +478,9 @@ async def generate_for_day(day_id: int, model: str | None = None):
             gq = GeneratedQuestion(
                 study_material_id=material.id,
                 enunciado=q.get("enunciado", ""),
-                alternativas=q.get("alternativas", {}),
+                alternativas=_clean_alternativas(q.get("alternativas", {})),
                 gabarito=q.get("gabarito", "A"),
-                comentario=q.get("comentario", ""),
+                comentario=_salvage_comentario(q.get("comentario", ""), q.get("alternativas", {})),
                 disciplina=q.get("disciplina", ""),
                 dificuldade=q.get("dificuldade", "medio"),
                 ordem=i,
