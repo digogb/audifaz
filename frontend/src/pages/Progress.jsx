@@ -7,31 +7,26 @@ import {
 import { TrendingUp, Target, CalendarCheck, BookOpen } from 'lucide-react'
 import * as api from '../api'
 
-const glass = {
-  background: 'rgba(255,255,255,0.05)',
-  border: '0.5px solid rgba(255,255,255,0.10)',
-  backdropFilter: 'blur(12px)',
-  WebkitBackdropFilter: 'blur(12px)',
-}
+// Track/superfície sutil que adapta ao tema (claro/escuro) via color-mix com o texto.
+const TRACK = 'color-mix(in srgb, var(--color-text) 8%, transparent)'
+const HAIRLINE = 'color-mix(in srgb, var(--color-text) 10%, transparent)'
+const ACCENT_FILL = 'var(--color-accent)'
 
 function GlassCard({ children, className = '' }) {
-  return <div className={`rounded-container ${className}`} style={glass}>{children}</div>
+  return <div className={`surface-card ${className}`}>{children}</div>
 }
 
 function SectionLabel({ children }) {
-  return <p className="text-[11px] font-medium text-white/40 uppercase tracking-widest mb-4">{children}</p>
+  return <p className="text-[11px] font-medium text-subtle uppercase tracking-widest mb-4">{children}</p>
 }
 
 function StatCard({ icon: Icon, value, label, accent }) {
-  const color = accent || '#5B9EF4'
+  const color = accent || 'var(--color-accent-text)'
   return (
-    <div
-      className="rounded-card p-4 flex flex-col items-center text-center"
-      style={{ background: 'rgba(255,255,255,0.05)', border: '0.5px solid rgba(255,255,255,0.09)' }}
-    >
-      <Icon size={22} strokeWidth={1.5} style={{ color, opacity: 0.7 }} />
+    <div className="surface-card p-4 flex flex-col items-center text-center">
+      <Icon size={22} strokeWidth={1.5} style={{ color, opacity: 0.85 }} />
       <p className="mt-2 text-[22px] font-bold leading-none" style={{ color }}>{value}</p>
-      <p className="mt-1.5 text-[10px] text-white/40 uppercase tracking-wider">{label}</p>
+      <p className="mt-1.5 text-[10px] text-subtle uppercase tracking-wider">{label}</p>
     </div>
   )
 }
@@ -43,27 +38,27 @@ function Heatmap({ days }) {
       <div className="flex flex-wrap gap-1">
         {days.map((d) => {
           const intensity = d.topics_total > 0 ? d.topics_done / d.topics_total : 0
-          let bg = 'rgba(255,255,255,0.05)'
-          if (d.tipo === 'prova') bg = 'rgba(212,132,90,0.85)'
-          else if (d.status === 'concluido') bg = `rgba(91,158,244,${0.30 + intensity * 0.65})`
-          else if (d.status === 'em_andamento') bg = 'rgba(212,132,90,0.45)'
-          else if (d.tipo === 'sabado' || d.tipo === 'domingo') bg = 'rgba(255,255,255,0.03)'
+          let bg = TRACK
+          if (d.tipo === 'prova') bg = 'color-mix(in srgb, var(--color-danger) 85%, transparent)'
+          else if (d.status === 'concluido') bg = `color-mix(in srgb, var(--color-accent) ${Math.round((0.30 + intensity * 0.65) * 100)}%, transparent)`
+          else if (d.status === 'em_andamento') bg = 'color-mix(in srgb, var(--color-danger) 45%, transparent)'
+          else if (d.tipo === 'sabado' || d.tipo === 'domingo') bg = 'color-mix(in srgb, var(--color-text) 4%, transparent)'
 
           const label = format(parseISO(d.data), 'EEE dd/MM', { locale: ptBR })
           return (
             <div
               key={d.data}
               title={`${label} · ${d.status} · ${d.topics_done}/${d.topics_total}`}
-              style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: bg, border: '0.5px solid rgba(255,255,255,0.06)' }}
+              style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: bg, border: `0.5px solid ${HAIRLINE}` }}
             />
           )
         })}
       </div>
-      <div className="flex items-center gap-3 mt-4 text-[11px] text-white/45 flex-wrap">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }} /> Pendente</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'rgba(212,132,90,0.45)' }} /> Em andamento</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'rgba(91,158,244,0.85)' }} /> Concluído</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'rgba(212,132,90,0.85)' }} /> Prova</span>
+      <div className="flex items-center gap-3 mt-4 text-[11px] text-subtle flex-wrap">
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: TRACK }} /> Pendente</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'color-mix(in srgb, var(--color-danger) 45%, transparent)' }} /> Em andamento</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'var(--color-accent)' }} /> Concluído</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: 'var(--color-danger)' }} /> Prova</span>
       </div>
     </div>
   )
@@ -77,7 +72,7 @@ export default function Progress() {
     api.getProgress().then(r => setData(r.data)).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <p className="text-white/40 text-sm animate-pulse">Carregando...</p>
+  if (loading) return <p className="text-subtle text-sm animate-pulse">Carregando...</p>
   if (!data) return null
 
   const totalDays = data.days.length
@@ -92,31 +87,41 @@ export default function Progress() {
   })
 
   const allDisciplines = [...new Set(data.mocks.flatMap(m => m.por_disciplina.map(d => d.disciplina)))]
-  const COLORS = ['#5B9EF4', '#D4845A', '#A8B5CC', '#2D72D9', '#E8865A', '#7BB0F7', '#C9956F']
+
+  // Resolve cores do tema ativo (recharts precisa de strings de cor, não classes CSS).
+  const css = typeof window !== 'undefined' ? getComputedStyle(document.documentElement) : null
+  const cv = (name, fallback) => (css?.getPropertyValue(name).trim() || fallback)
+  const cText = cv('--color-text', '#1A202C')
+  const cSubtle = cv('--color-text-subtle', '#718096')
+  const cSurface = cv('--color-bg-surface', '#FFFFFF')
+  const cAccent = cv('--color-accent-text', '#1F4D3A')
+  const cDanger = cv('--color-danger', '#C53030')
+  const cSecondary = cv('--color-secondary', '#A8B5CC')
+  const COLORS = [cAccent, cDanger, cSecondary, cAccent, cDanger, cSecondary]
 
   return (
     <div className="space-y-5 sm:space-y-6">
-      <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">Progresso</h1>
+      <h1 className="text-xl sm:text-2xl font-extrabold text-primary tracking-tight">Progresso</h1>
 
       {/* Stat cards row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
         <StatCard icon={Target} value={`${totalPct}%`} label="Geral" />
         <StatCard icon={CalendarCheck} value={doneDays} label="Concluídos" />
-        <StatCard icon={BookOpen} value={inProgressDays} label="Em andamento" accent="#D4845A" />
-        <StatCard icon={TrendingUp} value={data.mocks.length} label="Simulados" accent="#A8B5CC" />
+        <StatCard icon={BookOpen} value={inProgressDays} label="Em andamento" accent="var(--color-danger)" />
+        <StatCard icon={TrendingUp} value={data.mocks.length} label="Simulados" accent="var(--color-text-muted)" />
       </div>
 
       {/* Overall bar */}
       <GlassCard className="p-4 sm:p-5">
         <SectionLabel>Progresso geral</SectionLabel>
         <div className="flex items-end justify-between mb-3">
-          <p className="text-white/55 text-[13px]">{doneDays} de {totalDays} dias concluídos</p>
+          <p className="text-muted text-[13px]">{doneDays} de {totalDays} dias concluídos</p>
           <span className="text-3xl font-bold text-text-blue font-mono">{totalPct}%</span>
         </div>
-        <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        <div className="w-full rounded-full h-2 overflow-hidden" style={{ background: TRACK }}>
           <div
             className="h-2 rounded-full transition-all"
-            style={{ width: `${totalPct}%`, background: 'linear-gradient(90deg, #2D72D9, #5B9EF4)' }}
+            style={{ width: `${totalPct}%`, background: ACCENT_FILL }}
           />
         </div>
       </GlassCard>
@@ -134,18 +139,18 @@ export default function Progress() {
           {data.phases.map(p => (
             <div key={p.numero} className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-[13px] font-medium text-white">
+                <span className="text-[13px] font-medium text-primary">
                   <span className="text-text-blue">Fase {p.numero}</span> · {p.nome}
                 </span>
                 <span className="text-[13px] font-bold text-text-blue font-mono">{p.pct}%</span>
               </div>
-              <div className="w-full rounded-full h-1.5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+              <div className="w-full rounded-full h-1.5 overflow-hidden" style={{ background: TRACK }}>
                 <div
                   className="h-1.5 rounded-full transition-all"
-                  style={{ width: `${p.pct}%`, background: 'linear-gradient(90deg, #2D72D9, #5B9EF4)' }}
+                  style={{ width: `${p.pct}%`, background: ACCENT_FILL }}
                 />
               </div>
-              <p className="text-[11px] text-white/40 font-mono">{p.done_days}/{p.total_days} dias</p>
+              <p className="text-[11px] text-subtle font-mono">{p.done_days}/{p.total_days} dias</p>
             </div>
           ))}
         </div>
@@ -158,17 +163,17 @@ export default function Progress() {
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="data" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} stroke="rgba(255,255,255,0.10)" />
-                <YAxis domain={[0, 100]} tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 11 }} tickFormatter={v => `${v}%`} stroke="rgba(255,255,255,0.10)" />
+                <CartesianGrid strokeDasharray="3 3" stroke={cText} strokeOpacity={0.12} />
+                <XAxis dataKey="data" tick={{ fill: cSubtle, fontSize: 11 }} stroke={cText} strokeOpacity={0.2} />
+                <YAxis domain={[0, 100]} tick={{ fill: cSubtle, fontSize: 11 }} tickFormatter={v => `${v}%`} stroke={cText} strokeOpacity={0.2} />
                 <Tooltip
-                  contentStyle={{ background: '#1A2D50', border: '0.5px solid rgba(255,255,255,0.15)', borderRadius: 10, fontSize: 12 }}
-                  labelStyle={{ color: '#FFFFFF', fontWeight: 600 }}
-                  itemStyle={{ color: '#A8B5CC' }}
+                  contentStyle={{ background: cSurface, border: `1px solid ${cText}22`, borderRadius: 10, fontSize: 12 }}
+                  labelStyle={{ color: cText, fontWeight: 600 }}
+                  itemStyle={{ color: cSubtle }}
                   formatter={v => [`${v}%`]}
                 />
-                <Legend wrapperStyle={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }} />
-                <Line type="monotone" dataKey="total" stroke="#5B9EF4" strokeWidth={2.5} dot={{ r: 4, fill: '#5B9EF4' }} name="Total" />
+                <Legend wrapperStyle={{ fontSize: 11, color: cSubtle }} />
+                <Line type="monotone" dataKey="total" stroke={cAccent} strokeWidth={2.5} dot={{ r: 4, fill: cAccent }} name="Total" />
                 {allDisciplines.map((d, i) => (
                   <Line key={d} type="monotone" dataKey={d} stroke={COLORS[(i + 1) % COLORS.length]}
                     strokeWidth={1.5} dot={{ r: 3 }} name={d} strokeDasharray="5 3" />
@@ -179,8 +184,8 @@ export default function Progress() {
         </GlassCard>
       ) : (
         <div className="text-center py-12">
-          <p className="text-[13px] text-white/55">Nenhum simulado registrado ainda</p>
-          <p className="text-[11px] text-white/35 mt-1 font-mono">Registre na aba Simulados</p>
+          <p className="text-[13px] text-muted">Nenhum simulado registrado ainda</p>
+          <p className="text-[11px] text-subtle mt-1 font-mono">Registre na aba Simulados</p>
         </div>
       )}
     </div>
