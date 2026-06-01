@@ -219,20 +219,25 @@ function QuestionCard({ q }) {
   const [revealed, setRevealed] = useState(!!q.attempt)
   const [loading, setLoading] = useState(false)
   const [showComment, setShowComment] = useState(false)
+  // gabarito/comentário só chegam após a tentativa (ou já vêm se respondido antes)
+  const [gabarito, setGabarito] = useState(q.gabarito ?? null)
+  const [comentario, setComentario] = useState(q.comentario ?? null)
 
   const handleAnswer = async (alt) => {
     if (revealed) return
     setSelected(alt)
     setLoading(true)
     try {
-      await api.recordAttempt(q.id, alt)
+      const res = await api.recordAttempt(q.id, alt)
+      setGabarito(res.data.gabarito)
+      setComentario(res.data.comentario)
       setRevealed(true)
     } finally {
       setLoading(false)
     }
   }
 
-  const correct = q.gabarito
+  const correct = gabarito
   const acertou = revealed && selected === correct
 
   return (
@@ -283,7 +288,7 @@ function QuestionCard({ q }) {
           </button>
           {showComment && (
             <div className="mt-3 text-[12px] text-muted leading-relaxed surface-input rounded-btn p-3">
-              {q.comentario}
+              {comentario}
             </div>
           )}
         </div>

@@ -36,13 +36,23 @@ def _to_ctx(c: Concurso) -> ConcursoContext:
     )
 
 
-async def _load_examples(db: AsyncSession, banca: str, limit: int = 12) -> list[dict]:
+async def _load_examples(
+    db: AsyncSession, banca: str, limit: int = 12, seed: int | None = None
+) -> list[dict]:
     rows = (await db.execute(
         select(BancaExample)
         .where(BancaExample.banca == banca, BancaExample.ativo == True)
         .order_by(BancaExample.id)
-        .limit(limit)
     )).scalars().all()
+    if seed is not None and len(rows) > limit:
+        # Janela contígua determinística pela data do dia: mesma data → mesmo
+        # conjunto (mantém o cache do prompt estável no burst do cron, que gera
+        # vários usuários/dias em sequência); datas diferentes → exemplos
+        # diferentes, exercitando todo o acervo importado ao longo do plano.
+        start = seed % len(rows)
+        rows = [rows[(start + i) % len(rows)] for i in range(limit)]
+    else:
+        rows = rows[:limit]
     return [
         {
             "fonte": r.fonte,
@@ -116,17 +126,21 @@ async def get_material(
                 "respondido_em": att.respondido_em,
                 "observacao": att.observacao,
             }
-        questions_out.append({
+        q_out = {
             "id": q.id,
             "enunciado": q.enunciado,
             "alternativas": q.alternativas,
-            "gabarito": q.gabarito,
-            "comentario": q.comentario,
             "disciplina": q.disciplina,
             "dificuldade": q.dificuldade,
             "ordem": q.ordem,
             "attempt": att_out,
-        })
+        }
+        # Gabarito e comentário só são expostos depois que o usuário respondeu —
+        # senão vazam no payload (DevTools) antes da tentativa.
+        if att:
+            q_out["gabarito"] = q.gabarito
+            q_out["comentario"] = q.comentario
+        questions_out.append(q_out)
 
     return {
         "id": material.id,
@@ -183,7 +197,10 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             concurso = await db_pre.get(Concurso, concurso_id)
             if not concurso:
                 raise RuntimeError(f"concurso {concurso_id} sumiu")
-            examples = await _load_examples(db_pre, concurso.banca)
+            mat = await db_pre.get(StudyMaterial, material_id)
+            day = await db_pre.get(StudyDay, mat.study_day_id) if mat else None
+            seed = day.data.toordinal() if day else None
+            examples = await _load_examples(db_pre, concurso.banca, seed=seed)
             bloco_map = await _load_blocos(db_pre, concurso_id)
             ctx = _to_ctx(concurso)
 
@@ -382,7 +399,7 @@ async def generate_for_day(day_id: int, model: str | None = None):
         concurso = await _concurso_for_day(db, day_id)
         if not concurso:
             return
-        examples = await _load_examples(db, concurso.banca)
+        examples = await _load_examples(db, concurso.banca, seed=day.data.toordinal())
         bloco_map = await _load_blocos(db, concurso.id)
         ctx = _to_ctx(concurso)
 
@@ -528,4 +545,4 @@ async def record_attempt(
             db.add(error)
 
     await db.commit()
-    return {"acertou": acertou, "gabarito": question.gabarito}
+    return {"acertou": acertou, "gabarito": question.gabarito, "comentario": question.comentario}

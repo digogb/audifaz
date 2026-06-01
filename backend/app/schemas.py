@@ -67,8 +67,9 @@ class GeneratedQuestionOut(BaseModel):
     id: int
     enunciado: str
     alternativas: dict
-    gabarito: str
-    comentario: str
+    # Só preenchidos após o usuário responder (evita vazar o gabarito no payload)
+    gabarito: Optional[str] = None
+    comentario: Optional[str] = None
     disciplina: str
     dificuldade: str
     ordem: int
