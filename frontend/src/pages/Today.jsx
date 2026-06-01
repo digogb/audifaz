@@ -16,6 +16,7 @@ import AudioStatus from '../components/AudioStatus'
 const MODEL_LABELS = {
   'claude-sonnet-4-6': 'Sonnet 4.6',
   'claude-opus-4-7': 'Opus 4.7',
+  'claude-opus-4-8': 'Opus 4.8',
 }
 
 const TYPE_LABELS = {
@@ -302,7 +303,7 @@ export default function Today() {
   const [material, setMaterial] = useState(null)
   const [questions, setQuestions] = useState([])
   const [generating, setGenerating] = useState(false)
-  const [model, setModel] = useState('claude-sonnet-4-6')
+  const [model, setModel] = useState('claude-opus-4-8')
   const [error, setError] = useState(null)
   const [notes, setNotes] = useState('')
   const notesTimer = useRef(null)
@@ -532,8 +533,9 @@ export default function Today() {
                 disabled={generating}
                 className="surface-input flex-1 sm:flex-none rounded-btn text-[12px] text-primary px-3 py-2 focus:outline-none focus:border-accent"
               >
-                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
+                <option value="claude-opus-4-8">Opus 4.8</option>
                 <option value="claude-opus-4-7">Opus 4.7</option>
+                <option value="claude-sonnet-4-6">Sonnet 4.6</option>
               </select>
               <button
                 onClick={handleGenerate}
