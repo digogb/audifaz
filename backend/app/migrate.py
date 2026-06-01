@@ -151,14 +151,19 @@ async def migrate(db: AsyncSession):
         row = await db.execute(text("SELECT id FROM concursos WHERE slug = 'sefaz-ce-2026'"))
         default_concurso_id = row.scalar_one_or_none()
         if not default_concurso_id:
+            # Inclui theme_slug/brand/requer_assinatura explicitamente: numa tabela
+            # criada via create_all (deploy novo), esses NOT NULL não têm DEFAULT no
+            # nível do banco (o default é só do ORM), então o INSERT cru precisa supri-los.
             await db.execute(text("""
                 INSERT INTO concursos (slug, nome, banca, orgao, cargo, data_prova,
-                                       descricao, ativo, publico, criado_em)
+                                       descricao, theme_slug, brand, requer_assinatura,
+                                       ativo, publico, criado_em)
                 VALUES ('sefaz-ce-2026',
                         'SEFAZ-CE 2026 — Auditor Fiscal TI',
                         'FCC', 'SEFAZ-CE', 'B02 Auditor-Fiscal TI',
                         '2026-08-01',
                         'Concurso para Auditor Fiscal de TI da Secretaria da Fazenda do Ceará',
+                        'audifaz', 'audifaz', 0,
                         1, 1, datetime('now'))
             """))
             row = await db.execute(text("SELECT id FROM concursos WHERE slug = 'sefaz-ce-2026'"))
@@ -400,24 +405,22 @@ _DEFAULT_BLOCOS = {
         ("outros", "Outros / Não classificado", 0.5, "baixa", 0.0, 60.0, ""),
     ],
     "tjce-2026": [
-        # CE (peso 3 — onde mora o ouro)
-        ("ti-governanca", "Governança e Processos (ITIL/COBIT/PMBOK/CMMI/TOGAF)", 3.0, "alta", 18.0, 80.0, "itil,cobit,pmbok,governanca,governança,cmmi,mr-mps,togaf"),
-        ("ti-engenharia", "Engenharia de Software (UML/BPMN/Ágeis/Testes/ISO 25010)", 2.5, "alta", 8.0, 80.0, "uml,bpmn,scrum,kanban,xp,tdd,bdd,iso 25010,iso 12207,testes,requisitos,furps"),
-        ("ti-seguranca", "Segurança da Informação (ISO 27k/OWASP/LGPD/cripto)", 3.0, "alta", 10.0, 80.0, "iso 27,owasp,zero trust,siem,criptografia,pki,oauth,oidc,sgsi,nist,sso,mfa"),
-        ("ti-dados", "Banco de Dados (SQL/CTE/Window/DW/NoSQL)", 2.0, "media", 8.0, 80.0, "sql,banco,postgres,oracle,nosql,mongodb,etl,dw,olap,data lake,window,cte"),
-        ("ti-arquitetura", "Arquitetura, DevOps, Cloud e Stack PDPJ-Br", 2.0, "media", 12.0, 80.0, "microsserviços,microservices,ddd,hexagonal,kubernetes,docker,ci/cd,cloud,spring,eureka,zuul,keycloak,flyway,rancher,rabbitmq,pdpj"),
-        ("ti-prog-web", "Programação e Web (Java/Python/JS/REST/Git)", 1.5, "baixa", 4.0, 90.0, "java,python,javascript,react,angular,vue,node,rest,api,html,css,git,gitflow"),
-        ("ti-so-redes", "Sistemas Operacionais e Redes", 1.5, "media", 4.0, 70.0, "linux,redes,tcp,udp,osi,dns,dhcp,vpn,deadlock,paginação,escalonamento"),
-        # Normativos CNJ
-        ("normativos-cnj", "CNJ e PDPJ-Br (Res. 335/396/522, Portarias)", 3.0, "alta", 12.0, 85.0, "cnj,pdpj,moreq,resolução cnj,portaria cnj,335/2020,396/2021,522/2023,252/2020,253/2020,284/2021,131/2021,162/2021"),
-        # Leis gerais
-        ("lgpd-licitacao", "LGPD + Lei 14.133", 2.5, "alta", 6.0, 85.0, "lgpd,13.709,14.133,licitação,licitacao,tic,etp,tr,fiscalização,encarregado,dpo,anpd"),
+        # CE (peso 3) — estrutura alinhada à retificação do edital F06 (29/05/2026)
+        ("produto-gestao", "Gestão de Produtos, Estratégia e Design (temas 1–3)", 3.0, "alta", 16.0, 80.0, "visão de produto,gestão de produto,backlog,moscow,rice,wsjf,mvp,mmf,roadmap,okr,product discovery,design thinking,scamper,jobs to be done,jtbd,stakeholder,product owner,product manager,canvas,prd,feature flag,dark launch,ciclo de vida,usabilidade,acessibilidade,e-mag,prototipação"),
+        ("agilidade-metricas", "Agilidade, Fluxo e Métricas de Produto (temas 4–5)", 3.0, "alta", 8.0, 80.0, "scrum,kanban,flight levels,pi planning,limite de wip,lead time,cycle time,throughput,cfd,cumulative flow,nps,csat,cohort,teste a/b,outcome,output,métricas de processo,métricas de produto"),
+        ("riscos-qualidade", "Riscos, Qualidade, Conformidade e LGPD (tema 6)", 2.5, "alta", 7.0, 80.0, "gestão de riscos,privacy by design,privacy by default,finops,lgpd,13.709,base legal,anpd,encarregado,titular,conformidade,qualidade de software"),
+        ("dominio-eng", "Eng. de Domínio, SW Moderno e Java (temas 7,12,13)", 2.5, "media", 13.0, 78.0, "ddd,bounded context,linguagem ubíqua,context mapping,strangler,dívida técnica,modelo time,api-led,microsserviços,microservices,docker,kubernetes,devsecops,observabilidade,java,spring,hibernate,jpa,kafka,rabbitmq,mensageria,circuit breaker,service discovery,api gateway,interoperabilidade,pdpj"),
+        ("software-assurance", "Software Assurance / Segurança (tema 8)", 3.0, "alta", 9.0, 78.0, "owasp samm,samm,threat modeling,modelagem de ameaças,security by design,sdlc seguro,iam,rbac,abac,menor privilégio,sbom,cadeia de suprimentos,supply chain,não-repúdio,ripd,dpia,mfa,sso,oauth,oidc"),
+        ("ia-aplicada", "IA aplicada ao produto (tema 9)", 3.0, "alta", 8.0, 78.0, "inteligência artificial,machine learning,aprendizado de máquina,pln,processamento de linguagem,ia generativa,llm,engenharia de prompt,rag,retrieval-augmented,agentes,agênticos,alucinação,cnj 615,explicabilidade,human-in-the-loop,ética"),
+        ("dados-rpa", "Engenharia de Dados e RPA (temas 10–11)", 2.0, "media", 7.0, 75.0, "data lake,data warehouse,lakehouse,modelagem dimensional,star schema,snowflake,etl,elt,linhagem,metadados,catalogação,governança de dados,processamento distribuído,rpa,hyperautomation,ocr,bpm"),
+        ("contratacoes-tic", "Contratação e Fiscalização de TIC (tema 14)", 3.0, "alta", 7.0, 82.0, "14.133,contratação,licitação,licitacao,etp,termo de referência,pdtic,gestão contratual,fiscal técnico,sla,ans,dispensa,inexigibilidade,reequilíbrio,cnj,governança de tic"),
         # Legislação CE
-        ("leg-ce", "Legislação CE (Estatuto 9.826, Org. Jud. 16.397, PCD)", 2.0, "alta", 6.0, 80.0, "9.826,16.397,estatuto,organização judiciária,pcd,deficiência,csjt 386"),
+        ("leg-ce", "Legislação CE + Direitos PCD", 1.0, "alta", 6.0, 80.0, "9.826,16.397,estatuto,organização judiciária,previdência,pcd,deficiência,csjt 386,13.146,acessibilidade,10.098,5.296"),
         # CG
-        ("portugues", "Língua Portuguesa", 1.0, "alta", 8.0, 80.0, "portugues,português,gramatica,sintaxe,crase,regência,redação,morfossintaxe"),
-        ("rlm", "Raciocínio Lógico-Matemático", 1.0, "media", 5.0, 75.0, "rlm,raciocinio,lógica,proposição,estatística,probabilidade,silogismo"),
-        ("redacao", "Redação dissertativa", 1.0, "media", 3.0, 75.0, "redação,dissertativo,tema,argumentação,coesão"),
+        ("portugues", "Língua Portuguesa", 1.0, "alta", 11.0, 78.0, "portugues,português,crase,regência,concordância,morfossintaxe,pontuação,ortografia,acentuação,pronomes,figuras de linguagem,coordenação,subordinação"),
+        ("rlm", "Raciocínio Lógico-Matemático", 1.0, "media", 7.0, 72.0, "rlm,raciocínio,raciocinio,lógica,proposição,conectivos,tabela-verdade,silogismo,estatística,porcentagem,regra de três,desvio padrão,média,mediana,moda,variância"),
+        ("ingles", "Inglês técnico", 1.0, "baixa", 1.0, 70.0, "inglês técnico,english"),
+        ("redacao", "Redação dissertativa", 1.0, "media", 4.0, 75.0, "redação,redacao,dissertativo,argumentação,coesão"),
         ("outros", "Outros / Não classificado", 0.5, "baixa", 0.0, 60.0, ""),
     ],
 }
