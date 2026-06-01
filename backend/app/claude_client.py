@@ -279,17 +279,23 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
         {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
     ]
 
-    thinking_budget = 6000 if model in ("claude-opus-4-7", "claude-opus-4-8") else 4000
-
-    return {
+    params = {
         "model": model,
         "max_tokens": 16000,
         "system": system_blocks,
         "tools": tools,
         "tool_choice": {"type": "auto"},
         "messages": [{"role": "user", "content": user_message}],
-        "thinking": {"type": "enabled", "budget_tokens": thinking_budget},
     }
+    # Opus 4.8 substituiu o thinking de orçamento fixo (type=enabled) pelo
+    # thinking adaptativo controlado por output_config.effort.
+    if model == "claude-opus-4-8":
+        params["thinking"] = {"type": "adaptive"}
+        params["output_config"] = {"effort": "high"}
+    else:
+        thinking_budget = 6000 if model == "claude-opus-4-7" else 4000
+        params["thinking"] = {"type": "enabled", "budget_tokens": thinking_budget}
+    return params
 
 
 def _strip_preamble(content_md: str) -> str:
