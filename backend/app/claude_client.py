@@ -184,6 +184,7 @@ NÃO sinalize: conceitos gerais corretos, simplificações pedagógicas razoáve
 _PRICES = {
     "claude-sonnet-4-6": {"input": 3.0, "output": 15.0, "cache_write": 3.75, "cache_read": 0.30},
     "claude-opus-4-7": {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50},
+    "claude-opus-4-8": {"input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50},
 }
 
 
@@ -278,7 +279,7 @@ Após as 4 seções, use a ferramenta `registrar_questoes` para gerar exatamente
         {"type": "web_search_20250305", "name": "web_search", "max_uses": 5},
     ]
 
-    thinking_budget = 6000 if model == "claude-opus-4-7" else 4000
+    thinking_budget = 6000 if model in ("claude-opus-4-7", "claude-opus-4-8") else 4000
 
     return {
         "model": model,

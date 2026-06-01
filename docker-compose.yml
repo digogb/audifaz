@@ -23,6 +23,7 @@ services:
       - APP_ENV=${APP_ENV:-development}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_VALIDATOR_MODEL=${OPENAI_VALIDATOR_MODEL:-gpt-5-mini}
+      - GENERATION_MODEL=${GENERATION_MODEL:-claude-opus-4-8}
       - TZ=America/Fortaleza
     restart: unless-stopped
 

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select, delete
@@ -9,6 +10,9 @@ from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio, ConcursoContext
 from ..auth import get_current_user, get_admin_user, get_current_concurso, require_active_subscription
+
+# Modelo usado na geração diária (cron). Configurável via env; default Opus 4.8.
+GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "claude-opus-4-8")
 
 router = APIRouter(prefix="/api/days", tags=["materials"])
 
@@ -282,7 +286,7 @@ async def generate_material(
     __: User = Depends(require_active_subscription),
     concurso: Concurso = Depends(get_current_concurso),
 ):
-    if model not in ("claude-sonnet-4-6", "claude-opus-4-7"):
+    if model not in ("claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8"):
         raise HTTPException(400, "Modelo inválido")
 
     await _ensure_day_in_concurso(db, day_id, concurso.id)
@@ -354,8 +358,9 @@ async def generate_material(
     return snapshot
 
 
-async def generate_for_day(day_id: int, model: str = "claude-sonnet-4-6"):
+async def generate_for_day(day_id: int, model: str | None = None):
     """Used by cron job to generate material for a day without auth."""
+    model = model or GENERATION_MODEL
     async with AsyncSessionLocal() as db:
         # Skip if material already exists
         existing = await db.execute(
