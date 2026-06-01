@@ -114,6 +114,8 @@ def _build_tool(bloco_slugs: list[str]) -> dict:
                 "D": {"type": "string"}, "E": {"type": "string"},
             },
             "required": ["A", "B", "C", "D", "E"],
+            # Sem chaves extras: impede o modelo de injetar 'comentario'/'F' aqui.
+            "additionalProperties": False,
         },
         "gabarito": {"type": "string", "enum": ["A", "B", "C", "D", "E"]},
         "comentario": {"type": "string", "description": "Explica o gabarito e por que cada alternativa errada está errada"},

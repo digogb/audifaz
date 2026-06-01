@@ -36,6 +36,15 @@ def _to_ctx(c: Concurso) -> ConcursoContext:
     )
 
 
+def _clean_alternativas(alts) -> dict:
+    """Mantém apenas as chaves A–E. A geração às vezes injeta chaves espúrias
+    (ex.: 'comentario' com o gabarito embutido, ou um 'F'), que vazariam para o
+    cliente já que o dict de alternativas sempre é renderizado."""
+    if not isinstance(alts, dict):
+        return {}
+    return {k.upper(): v for k, v in alts.items() if k.upper() in ("A", "B", "C", "D", "E")}
+
+
 async def _load_examples(
     db: AsyncSession, banca: str, limit: int = 12, seed: int | None = None
 ) -> list[dict]:
@@ -271,7 +280,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
                 db.add(GeneratedQuestion(
                     study_material_id=material_id,
                     enunciado=q.get("enunciado", ""),
-                    alternativas=q.get("alternativas", {}),
+                    alternativas=_clean_alternativas(q.get("alternativas", {})),
                     gabarito=q.get("gabarito", "A"),
                     comentario=q.get("comentario", ""),
                     disciplina=q.get("disciplina", ""),

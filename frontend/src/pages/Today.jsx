@@ -254,7 +254,10 @@ function QuestionCard({ q }) {
       </div>
 
       <div className="space-y-1.5">
-        {Object.entries(q.alternativas).map(([key, text]) => {
+        {/* Só A–E: blinda contra dados malformados (ex.: chave 'comentario'/'F'
+            que a geração às vezes injeta no dict de alternativas). */}
+        {['A', 'B', 'C', 'D', 'E'].filter(key => key in q.alternativas).map((key) => {
+          const text = q.alternativas[key]
           let cls = 'text-muted hover:bg-accent-soft cursor-pointer surface-input'
           if (revealed) {
             if (key === correct) cls = 'text-accent-text bg-accent-soft'
