@@ -45,6 +45,19 @@ def _clean_alternativas(alts) -> dict:
     return {k.upper(): v for k, v in alts.items() if k.upper() in ("A", "B", "C", "D", "E")}
 
 
+def _parse_gabarito(raw) -> str:
+    """Normaliza o gabarito retornado pelo Claude.
+
+    dict.get("gabarito", "A") retorna None quando a chave existe mas o valor é
+    null — o default só é usado quando a chave está ausente. Este helper
+    garante que o gabarito é sempre uma letra válida (A–E), usando "A" como
+    fallback seguro quando o modelo viola o schema."""
+    if not raw:
+        return "A"
+    g = str(raw).strip().upper()[:1]
+    return g if g in ("A", "B", "C", "D", "E") else "A"
+
+
 def _salvage_comentario(comentario, alts) -> str:
     """Se o comentário veio vazio mas o modelo o embutiu em alternativas['comentario'],
     recupera-o antes de _clean_alternativas descartar a chave (senão perderíamos a
@@ -294,7 +307,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
                     study_material_id=material_id,
                     enunciado=q.get("enunciado", ""),
                     alternativas=_clean_alternativas(q.get("alternativas", {})),
-                    gabarito=q.get("gabarito", "A"),
+                    gabarito=_parse_gabarito(q.get("gabarito")),
                     comentario=_salvage_comentario(q.get("comentario", ""), q.get("alternativas", {})),
                     disciplina=q.get("disciplina", ""),
                     dificuldade=q.get("dificuldade", "medio"),
@@ -479,7 +492,7 @@ async def generate_for_day(day_id: int, model: str | None = None):
                 study_material_id=material.id,
                 enunciado=q.get("enunciado", ""),
                 alternativas=_clean_alternativas(q.get("alternativas", {})),
-                gabarito=q.get("gabarito", "A"),
+                gabarito=_parse_gabarito(q.get("gabarito")),
                 comentario=_salvage_comentario(q.get("comentario", ""), q.get("alternativas", {})),
                 disciplina=q.get("disciplina", ""),
                 dificuldade=q.get("dificuldade", "medio"),
@@ -515,6 +528,9 @@ async def record_attempt(
     question = await db.get(GeneratedQuestion, question_id)
     if not question:
         raise HTTPException(404)
+
+    if not question.gabarito:
+        raise HTTPException(422, detail="Questão com gabarito inválido; por favor reporte o erro.")
 
     acertou = body.alternativa_escolhida.upper() == question.gabarito.upper()
 

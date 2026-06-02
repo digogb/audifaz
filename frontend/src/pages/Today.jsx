@@ -219,6 +219,7 @@ function QuestionCard({ q }) {
   const [revealed, setRevealed] = useState(!!q.attempt)
   const [loading, setLoading] = useState(false)
   const [showComment, setShowComment] = useState(false)
+  const [answerError, setAnswerError] = useState(null)
   // gabarito/comentário só chegam após a tentativa (ou já vêm se respondido antes)
   const [gabarito, setGabarito] = useState(q.gabarito ?? null)
   const [comentario, setComentario] = useState(q.comentario ?? null)
@@ -227,11 +228,15 @@ function QuestionCard({ q }) {
     if (revealed) return
     setSelected(alt)
     setLoading(true)
+    setAnswerError(null)
     try {
       const res = await api.recordAttempt(q.id, alt)
-      setGabarito(res.data.gabarito)
-      setComentario(res.data.comentario)
+      setGabarito(res.data.gabarito ?? null)
+      setComentario(res.data.comentario ?? null)
       setRevealed(true)
+    } catch (e) {
+      setSelected(null)
+      setAnswerError(e.response?.data?.detail || 'Erro ao registrar resposta. Tente novamente.')
     } finally {
       setLoading(false)
     }
@@ -280,6 +285,10 @@ function QuestionCard({ q }) {
         })}
       </div>
 
+      {answerError && (
+        <p className="text-[12px] text-danger mt-1">{answerError}</p>
+      )}
+
       {revealed && (
         <div>
           <button
@@ -287,11 +296,11 @@ function QuestionCard({ q }) {
             className={`text-[12px] flex items-center gap-1 font-medium ${acertou ? 'text-accent-text' : 'text-danger'}`}
           >
             {showComment ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            {acertou ? '✓ Correto' : `✗ Gabarito: ${correct}`} — ver comentário
+            {acertou ? '✓ Correto' : correct ? `✗ Gabarito: ${correct}` : '✗ Gabarito indisponível'} — ver comentário
           </button>
           {showComment && (
             <div className="mt-3 text-[12px] text-muted leading-relaxed surface-input rounded-btn p-3">
-              {comentario}
+              {comentario || 'Comentário não disponível para esta questão.'}
             </div>
           )}
         </div>
