@@ -1,9 +1,55 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X, Settings, ChevronDown, Target, PenLine, CalendarDays } from 'lucide-react'
+import { BookOpen, AlertCircle, BarChart2, FileText, LogOut, Menu, X, Settings, ChevronDown, Target, PenLine, CalendarDays, Palette } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useConcurso } from '../contexts/ConcursoContext'
 import { useBrand } from '../contexts/BrandContext'
+import { useTheme } from '../contexts/ThemeProvider'
+
+const THEME_OPTIONS = [
+  { slug: 'audifaz', label: 'SEFAZ', hint: 'Tema escuro' },
+  { slug: 'lexlumina', label: 'TJCE', hint: 'Tema claro' },
+]
+
+function ThemeSwitcher() {
+  const { themeSlug, setOverride } = useTheme()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Trocar tema"
+        aria-label="Trocar tema"
+        className="flex items-center gap-1 px-2 py-1 rounded-btn text-[11px] font-mono text-muted hover:text-primary hover:bg-accent-soft transition-colors"
+      >
+        <Palette size={13} strokeWidth={1.75} />
+        <ChevronDown size={11} strokeWidth={1.75} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 min-w-[180px] z-20 surface-card py-1">
+            {THEME_OPTIONS.map(opt => (
+              <button
+                key={opt.slug}
+                onClick={() => { setOpen(false); setOverride(opt.slug) }}
+                className={`w-full text-left px-3 py-2 text-[12px] transition-colors ${
+                  opt.slug === themeSlug
+                    ? 'bg-accent-soft text-accent-text'
+                    : 'text-muted hover:bg-accent-soft hover:text-primary'
+                }`}
+              >
+                <div className="font-medium">{opt.label}</div>
+                <div className="text-[10px] text-subtle font-mono">{opt.hint}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
 
 const nav = [
   { to: '/', label: 'Hoje', icon: BookOpen },
@@ -111,6 +157,7 @@ export default function Layout({ children }) {
 
             <div className="flex items-center gap-2">
               <span className="hidden sm:inline text-[12px] text-subtle font-mono">{username}</span>
+              <ThemeSwitcher />
               <button
                 onClick={logout}
                 title="Sair"
