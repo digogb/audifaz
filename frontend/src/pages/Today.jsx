@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm'
 import {
   Sparkles, CheckSquare, Square, ChevronDown, ChevronUp,
   RefreshCw, ChevronLeft, ChevronRight, ShieldAlert, ShieldCheck,
-  Flag, X, Send,
+  Flag, X, Send, Copy, Check,
 } from 'lucide-react'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
@@ -140,6 +140,57 @@ function ValidationBanner({ material }) {
   )
 }
 
+
+// Remove o artefato final em que o modelo anuncia a geração das questões
+// (ex.: "Agora vou gerar e registrar as 15 questões diagnósticas estilo FCC:").
+// As questões em si não vivem no conteudo_md — ficam em registros próprios.
+function contentForCopy(md) {
+  if (!md) return ''
+  const lines = md.split('\n')
+  while (lines.length) {
+    const last = lines[lines.length - 1].trim()
+    const isBlank = last === ''
+    const isRule = /^-{3,}$/.test(last)
+    const isQuestionAnnouncement =
+      /quest(õe|ã|o)/i.test(last) && /(vou|gerar|registr|diagn|abaixo|seguir|seguint)/i.test(last)
+    if (isBlank || isRule || isQuestionAnnouncement) lines.pop()
+    else break
+  }
+  return lines.join('\n').trim()
+}
+
+function CopyButton({ text, label = 'Copiar conteúdo' }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    const value = contentForCopy(text)
+    try {
+      await navigator.clipboard.writeText(value)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = value
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1800)
+  }
+
+  return (
+    <button
+      onClick={copy}
+      className="inline-flex items-center gap-1 text-[11px] text-subtle hover:text-accent-text transition-colors"
+    >
+      {copied
+        ? <><Check size={11} strokeWidth={2} /> Copiado</>
+        : <><Copy size={11} strokeWidth={2} /> {label}</>}
+    </button>
+  )
+}
 
 function ReportButton({ target_type, question_id, material_id, redacao_id, label = 'Reportar erro' }) {
   const [open, setOpen] = useState(false)
@@ -616,7 +667,8 @@ export default function Today() {
               <div className="prose-study">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{material.conteudo_md}</ReactMarkdown>
               </div>
-              <div className="pt-3 mt-3 flex justify-end" style={{ borderTop: 'var(--surface-border)' }}>
+              <div className="pt-3 mt-3 flex items-center justify-between gap-3" style={{ borderTop: 'var(--surface-border)' }}>
+                <CopyButton text={material.conteudo_md} />
                 <ReportButton target_type="material" material_id={material.id} label="Reportar erro no material" />
               </div>
             </Card>
