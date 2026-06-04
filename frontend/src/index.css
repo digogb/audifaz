@@ -84,6 +84,15 @@
     transition: background-color 200ms ease, color 200ms ease;
   }
 
+  /* Dropdown nativo de <select>: o --input-bg é translúcido, então o browser
+     compunha as <option> sobre branco (texto branco no branco = invisível).
+     Força fundo OPACO + cor de texto do tema — vale para audifaz e lexlumina. */
+  select option,
+  select optgroup {
+    background-color: var(--color-bg-surface);
+    color: var(--color-text);
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
   }
