@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..auth import get_current_user, get_admin_user, get_current_brand
+from ..config import audio_enabled
 from ..db import get_db
 from ..models import Concurso, UserConcurso, User, BancaExample
 from ..schemas import ConcursoOut
@@ -96,8 +97,9 @@ async def list_public_concursos(
 
 @router.get("/brand")
 async def current_brand(brand: str = Depends(get_current_brand)):
-    """Expõe a brand inferida pelo Host (público, útil pro frontend antes do login)."""
-    return {"brand": brand}
+    """Expõe a brand inferida pelo Host (público, útil pro frontend antes do login)
+    + feature flags de runtime que o frontend usa pra esconder UI indisponível."""
+    return {"brand": brand, "audio_enabled": audio_enabled()}
 
 
 @router.post("/admin/concursos", response_model=ConcursoOut, status_code=201)

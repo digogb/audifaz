@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { Headphones, Download, RefreshCw, Sparkles, AlertTriangle } from 'lucide-react'
 import * as api from '../api'
 import { useAuth } from '../contexts/AuthContext'
+import { useBrand } from '../contexts/BrandContext'
 
 const glass = {
   background: 'rgba(255,255,255,0.05)',
@@ -25,6 +26,7 @@ function formatBytes(b) {
 
 export default function AudioStatus({ dayId, materialReady }) {
   const { isAdmin } = useAuth()
+  const { audioEnabled } = useBrand()
   const [audio, setAudio] = useState(null)
   const [loading, setLoading] = useState(true)
   const [triggering, setTriggering] = useState(false)
@@ -43,10 +45,10 @@ export default function AudioStatus({ dayId, materialReady }) {
   }
 
   useEffect(() => {
-    if (!dayId) return
+    if (!dayId || !audioEnabled) return
     setLoading(true)
     load()
-  }, [dayId])
+  }, [dayId, audioEnabled])
 
   useEffect(() => {
     const polling = audio?.status === 'pendente' || audio?.status === 'gerando'
@@ -71,6 +73,8 @@ export default function AudioStatus({ dayId, materialReady }) {
     }
   }
 
+  // Áudio desabilitado neste ambiente (prod não roda o audio-worker): some com a UI
+  if (!audioEnabled) return null
   if (loading || !materialReady) return null
 
   // Sem áudio ainda

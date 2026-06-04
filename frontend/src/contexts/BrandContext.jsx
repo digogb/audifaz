@@ -42,19 +42,21 @@ export function BrandProvider({ children }) {
   const override = typeof window !== 'undefined' ? readQueryOverride() : null
   const initial = override || localStorage.getItem(STORAGE_KEY) || 'audifaz'
   const [brand, setBrand] = useState(initial)
+  const [audioEnabled, setAudioEnabled] = useState(false)
   const [loading, setLoading] = useState(!override)
 
   useEffect(() => {
-    if (override) {
-      // override força — não precisa perguntar pro backend
-      localStorage.setItem(STORAGE_KEY, override)
-      return
-    }
+    // Sempre consulta /brand pra capturar feature flags (audio_enabled),
+    // mas só aplica o brand do backend se não houver override manual.
+    if (override) localStorage.setItem(STORAGE_KEY, override)
     api.getCurrentBrand()
       .then(r => {
-        const b = r.data?.brand || 'audifaz'
-        localStorage.setItem(STORAGE_KEY, b)
-        setBrand(b)
+        setAudioEnabled(!!r.data?.audio_enabled)
+        if (!override) {
+          const b = r.data?.brand || 'audifaz'
+          localStorage.setItem(STORAGE_KEY, b)
+          setBrand(b)
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -68,7 +70,7 @@ export function BrandProvider({ children }) {
   }, [meta?.nome])
 
   return (
-    <BrandContext.Provider value={{ brand, meta, loading, hasOverride: !!override }}>
+    <BrandContext.Provider value={{ brand, meta, loading, audioEnabled, hasOverride: !!override }}>
       {children}
     </BrandContext.Provider>
   )

@@ -10,6 +10,7 @@ from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio, ConcursoContext
 from ..auth import get_current_user, get_admin_user, get_current_concurso, require_active_subscription
+from ..config import audio_enabled
 
 # Modelo usado na geração diária (cron). Configurável via env; default Opus 4.8.
 GENERATION_MODEL = os.environ.get("GENERATION_MODEL", "claude-opus-4-8")
@@ -194,7 +195,13 @@ async def get_material(
 
 
 async def _enqueue_audio(db, material_id: int):
-    """Cria/reseta MaterialAudio('pendente') pro worker pegar."""
+    """Cria/reseta MaterialAudio('pendente') pro worker pegar.
+
+    No-op quando o áudio está desabilitado (prod não roda o audio-worker):
+    evita acumular registros 'pendente' que nunca seriam processados.
+    """
+    if not audio_enabled():
+        return
     existing = await db.execute(
         select(MaterialAudio).where(MaterialAudio.study_material_id == material_id)
     )
