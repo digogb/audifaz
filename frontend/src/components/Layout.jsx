@@ -129,13 +129,13 @@ export default function Layout({ children }) {
       <header className="sticky top-3 sm:top-4 z-30 px-3 sm:px-4">
         <div className="max-w-5xl mx-auto">
           <div className="surface-card flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <Wordmark />
               <ConcursoSwitcher />
             </div>
 
             {/* Desktop nav */}
-            <nav className="hidden md:flex items-center gap-0.5">
+            <nav className="hidden lg:flex items-center gap-0.5 min-w-0">
               {nav.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
@@ -155,20 +155,20 @@ export default function Layout({ children }) {
               ))}
             </nav>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="hidden sm:inline text-[12px] text-subtle font-mono">{username}</span>
               <ThemeSwitcher />
               <button
                 onClick={logout}
                 title="Sair"
-                className="hidden md:flex p-1.5 rounded-btn text-subtle hover:text-danger hover:bg-accent-soft transition-colors"
+                className="hidden lg:flex p-1.5 rounded-btn text-subtle hover:text-danger hover:bg-accent-soft transition-colors"
               >
                 <LogOut size={13} strokeWidth={1.75} />
               </button>
               {/* Mobile menu toggle */}
               <button
                 onClick={() => setOpen(!open)}
-                className="md:hidden p-1.5 rounded-btn text-muted hover:text-primary hover:bg-accent-soft transition-colors"
+                className="lg:hidden p-1.5 rounded-btn text-muted hover:text-primary hover:bg-accent-soft transition-colors"
                 aria-label="Menu"
               >
                 {open ? <X size={18} strokeWidth={1.75} /> : <Menu size={18} strokeWidth={1.75} />}
@@ -178,7 +178,7 @@ export default function Layout({ children }) {
 
           {/* Mobile drawer */}
           {open && (
-            <div className="md:hidden mt-2 surface-card p-2 space-y-0.5">
+            <div className="lg:hidden mt-2 surface-card p-2 space-y-0.5">
               {nav.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
