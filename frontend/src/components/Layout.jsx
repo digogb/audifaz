@@ -7,8 +7,8 @@ import { useBrand } from '../contexts/BrandContext'
 import { useTheme } from '../contexts/ThemeProvider'
 
 const THEME_OPTIONS = [
-  { slug: 'audifaz', label: 'SEFAZ', hint: 'Tema escuro' },
-  { slug: 'lexlumina', label: 'TJCE', hint: 'Tema claro' },
+  { slug: 'audifaz', label: 'Escuro', hint: 'Tema escuro' },
+  { slug: 'lexlumina', label: 'Claro', hint: 'Tema claro' },
 ]
 
 function ThemeSwitcher() {

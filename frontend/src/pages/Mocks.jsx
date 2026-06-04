@@ -85,7 +85,7 @@ function MockForm({ onClose, onSave }) {
 
           <Field label="Observações">
             <input value={form.observacoes} onChange={e => setForm(p => ({ ...p, observacoes: e.target.value }))}
-              placeholder="ex: SEFAZ-BA 2019" className={inputCls} style={inputStyle} />
+              placeholder="ex: FCC 2019" className={inputCls} style={inputStyle} />
           </Field>
 
           <div className="space-y-2">

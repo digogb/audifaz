@@ -61,6 +61,12 @@ export function BrandProvider({ children }) {
   }, []) // eslint-disable-line
 
   const meta = BRAND_META[brand] || BRAND_META.audifaz
+
+  // Título da aba acompanha o brand (AnaJud no TJ, AudiFaz no SEFAZ)
+  useEffect(() => {
+    if (typeof document !== 'undefined' && meta?.nome) document.title = meta.nome
+  }, [meta?.nome])
+
   return (
     <BrandContext.Provider value={{ brand, meta, loading, hasOverride: !!override }}>
       {children}
