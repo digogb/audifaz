@@ -5,7 +5,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
-from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso, BancaExample, Bloco
+from ..models import StudyDay, StudyMaterial, GeneratedQuestion, QuestionAttempt, ErrorEntry, User, MaterialAudio, Week, Phase, Concurso, BancaExample, Bloco, Topic
 from ..schemas import StudyMaterialOut, AttemptCreate
 from .. import claude_client
 from ..claude_client import _calc_cost, _calc_cache_ratio, ConcursoContext
@@ -72,23 +72,78 @@ def _salvage_comentario(comentario, alts) -> str:
     return comentario or ""
 
 
+def _rotate(rows: list, n: int, seed: int | None) -> list:
+    """Janela contígua determinística de `n` itens começando em `seed % len`.
+
+    Mesma seed (= data do dia) → mesmo conjunto, o que mantém o cache do prompt
+    estável no burst do cron; seeds diferentes → janelas diferentes, exercitando
+    todo o acervo ao longo do plano.
+    """
+    if not rows:
+        return []
+    if seed is None or len(rows) <= n:
+        return rows[:n]
+    start = seed % len(rows)
+    return [rows[(start + i) % len(rows)] for i in range(n)]
+
+
+async def _focus_terms_for_day(db: AsyncSession, day_id: int) -> list[str]:
+    """Termos (keywords + nome dos blocos do dia) p/ priorizar exemplos on-topic.
+
+    Usa Bloco.keywords (CSV curado "para heurística") dos blocos referenciados
+    pelos tópicos do dia. Vazio em dias sem disciplina única (redação, revisão).
+    """
+    bloco_ids = {
+        b for (b,) in (await db.execute(
+            select(Topic.bloco_id).where(
+                Topic.study_day_id == day_id, Topic.bloco_id.isnot(None)
+            )
+        )).all()
+    }
+    if not bloco_ids:
+        return []
+    rows = (await db.execute(
+        select(Bloco.nome, Bloco.keywords).where(Bloco.id.in_(bloco_ids))
+    )).all()
+    terms: list[str] = []
+    for nome, kw in rows:
+        terms += [k.strip().lower() for k in (kw or "").split(",") if k.strip()]
+        if nome:
+            terms.append(nome.lower())
+    return list(dict.fromkeys(terms))  # dedup preservando ordem
+
+
 async def _load_examples(
-    db: AsyncSession, banca: str, limit: int = 12, seed: int | None = None
+    db: AsyncSession,
+    banca: str,
+    limit: int = 12,
+    seed: int | None = None,
+    focus_terms: list[str] | None = None,
 ) -> list[dict]:
     rows = (await db.execute(
         select(BancaExample)
         .where(BancaExample.banca == banca, BancaExample.ativo == True)
         .order_by(BancaExample.id)
     )).scalars().all()
-    if seed is not None and len(rows) > limit:
-        # Janela contígua determinística pela data do dia: mesma data → mesmo
-        # conjunto (mantém o cache do prompt estável no burst do cron, que gera
-        # vários usuários/dias em sequência); datas diferentes → exemplos
-        # diferentes, exercitando todo o acervo importado ao longo do plano.
-        start = seed % len(rows)
-        rows = [rows[(start + i) % len(rows)] for i in range(limit)]
+
+    if focus_terms:
+        # Prioriza exemplos cuja disciplina casa com os termos do dia; completa
+        # com o restante (rotacionado) para sempre devolver `limit`. A rotação
+        # roda dentro de cada subconjunto, preservando variedade entre datas.
+        ft = [t for t in focus_terms if t]
+        on, on_ids = [], set()
+        for r in rows:
+            d = (r.disciplina or "").lower()
+            if any(t in d for t in ft):
+                on.append(r)
+                on_ids.add(r.id)
+        off = [r for r in rows if r.id not in on_ids]
+        picked = _rotate(on, limit, seed)
+        if len(picked) < limit:
+            picked += _rotate(off, limit - len(picked), seed)
     else:
-        rows = rows[:limit]
+        picked = _rotate(rows, limit, seed)
+
     return [
         {
             "fonte": r.fonte,
@@ -98,7 +153,7 @@ async def _load_examples(
             "alternativas": r.alternativas,
             "gabarito": r.gabarito,
         }
-        for r in rows
+        for r in picked
     ]
 
 
@@ -242,7 +297,8 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             mat = await db_pre.get(StudyMaterial, material_id)
             day = await db_pre.get(StudyDay, mat.study_day_id) if mat else None
             seed = day.data.toordinal() if day else None
-            examples = await _load_examples(db_pre, concurso.banca, seed=seed)
+            focus = await _focus_terms_for_day(db_pre, day.id) if day else None
+            examples = await _load_examples(db_pre, concurso.banca, seed=seed, focus_terms=focus)
             bloco_map = await _load_blocos(db_pre, concurso_id)
             ctx = _to_ctx(concurso)
 
@@ -441,7 +497,8 @@ async def generate_for_day(day_id: int, model: str | None = None):
         concurso = await _concurso_for_day(db, day_id)
         if not concurso:
             return
-        examples = await _load_examples(db, concurso.banca, seed=day.data.toordinal())
+        focus = await _focus_terms_for_day(db, day.id)
+        examples = await _load_examples(db, concurso.banca, seed=day.data.toordinal(), focus_terms=focus)
         bloco_map = await _load_blocos(db, concurso.id)
         ctx = _to_ctx(concurso)
 
