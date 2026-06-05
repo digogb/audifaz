@@ -29,7 +29,7 @@ function ThemeSwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 min-w-[180px] z-20 surface-card py-1">
+          <div className="absolute right-0 top-full mt-1 min-w-[180px] z-20 surface-menu py-1">
             {THEME_OPTIONS.map(opt => (
               <button
                 key={opt.slug}
@@ -86,7 +86,7 @@ function ConcursoSwitcher() {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 min-w-[240px] z-20 surface-card py-1">
+          <div className="absolute right-0 top-full mt-1 min-w-[240px] z-20 surface-menu py-1">
             {concursos.map(c => (
               <button
                 key={c.id}
@@ -127,7 +127,7 @@ export default function Layout({ children }) {
   return (
     <div className="relative min-h-screen flex flex-col">
       <header className="sticky top-3 sm:top-4 z-30 px-3 sm:px-4">
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-6xl mx-auto">
           <div className="surface-card flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3">
             <div className="flex items-center gap-3 shrink-0">
               <Wordmark />
@@ -142,7 +142,7 @@ export default function Layout({ children }) {
                   to={to}
                   end={to === '/'}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-[13px] font-medium transition-all ${
+                    `flex items-center gap-1.5 px-2.5 py-1.5 rounded-btn text-[13px] font-medium whitespace-nowrap transition-all ${
                       isActive
                         ? 'bg-accent-soft text-accent-text'
                         : 'text-muted hover:text-primary hover:bg-accent-soft'
@@ -178,7 +178,7 @@ export default function Layout({ children }) {
 
           {/* Mobile drawer */}
           {open && (
-            <div className="lg:hidden mt-2 surface-card p-2 space-y-0.5">
+            <div className="lg:hidden mt-2 surface-menu p-2 space-y-0.5">
               {nav.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
