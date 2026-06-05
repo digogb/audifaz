@@ -92,14 +92,19 @@ REGRAS INVIOLÁVEIS:
 - Classifique `disciplina` de forma específica (framework/assunto), não genérica."""
 
 
-def _extract_pdf_text(path: str) -> str:
-    parts = []
+def _extract_pdf_pages(path: str) -> list[str]:
+    """Texto de cada página (só as não-vazias), preservando a ordem."""
+    pages = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
             txt = page.extract_text() or ""
             if txt.strip():
-                parts.append(txt)
-    return "\n\n".join(parts)
+                pages.append(txt)
+    return pages
+
+
+def _extract_pdf_text(path: str) -> str:
+    return "\n\n".join(_extract_pdf_pages(path))
 
 
 def _load_gabarito(arg: str | None) -> str:
@@ -115,28 +120,76 @@ def _load_gabarito(arg: str | None) -> str:
     return arg
 
 
-async def _extract_questions(prova_text: str, gabarito_text: str, model: str) -> list[dict]:
+# Lote de páginas por chamada. Provas FCC têm ~2-4 questões/página; 8 páginas
+# (~15-25 questões) cabem com folga na resposta sem risco de truncamento.
+PAGES_PER_CHUNK = 8
+# Sobreposição de 1 página entre lotes: evita perder questão partida na fronteira.
+CHUNK_OVERLAP = 1
+
+
+async def _extract_chunk(prova_text: str, gabarito_text: str, model: str) -> list[dict]:
     gab_block = (
-        f"\n\n=== GABARITO OFICIAL ===\n{gabarito_text}\n"
+        f"\n\n=== GABARITO OFICIAL (prova inteira; case pelo número) ===\n{gabarito_text}\n"
         if gabarito_text.strip()
         else "\n\n(Gabarito oficial não fornecido — só inclua questão se o gabarito for inequívoco no próprio texto.)"
     )
     user_msg = (
-        "Extraia as questões de múltipla escolha da prova abaixo e registre via a ferramenta.\n"
-        f"=== TEXTO DA PROVA ===\n{prova_text}{gab_block}"
+        "Extraia as questões de múltipla escolha do TRECHO de prova abaixo e registre via a ferramenta. "
+        "O trecho pode começar/terminar no meio de uma questão; ignore qualquer questão incompleta.\n"
+        f"=== TRECHO DA PROVA ===\n{prova_text}{gab_block}"
     )
-    resp = await _client.messages.create(
+    # Streaming é obrigatório com max_tokens alto (o SDK recusa non-streaming
+    # quando a geração pode passar de 10 min) e evita o truncamento silencioso
+    # que o teto antigo de 16k causava em provas grandes.
+    async with _client.messages.stream(
         model=model,
-        max_tokens=16000,
+        max_tokens=32000,
         system=_SYSTEM,
         tools=[_EXTRACT_TOOL],
         tool_choice={"type": "tool", "name": "registrar_questoes_reais"},
         messages=[{"role": "user", "content": user_msg}],
-    )
+    ) as stream:
+        resp = await stream.get_final_message()
+    if resp.stop_reason == "max_tokens":
+        raise RuntimeError(
+            "Resposta truncada (max_tokens) mesmo com chunking — reduza PAGES_PER_CHUNK."
+        )
     for block in resp.content:
         if getattr(block, "type", None) == "tool_use" and block.name == "registrar_questoes_reais":
             return block.input.get("questoes", [])
     return []
+
+
+async def _extract_questions(pages: list[str], gabarito_text: str, model: str) -> list[dict]:
+    """Extrai a prova em lotes de páginas (com streaming) e mescla por número.
+
+    Chunkar evita o truncamento que ocorria ao pedir ~80 questões numa única
+    resposta. Dedup por `numero` mantendo a transcrição mais completa (maior
+    enunciado), o que naturalmente descarta as questões partidas na fronteira.
+    """
+    step = max(1, PAGES_PER_CHUNK - CHUNK_OVERLAP)
+    by_num: dict[int, dict] = {}
+    sem_num: list[dict] = []
+    n_chunks = (max(0, len(pages) - CHUNK_OVERLAP) + step - 1) // step or 1
+    for ci, start in enumerate(range(0, len(pages), step), 1):
+        chunk_text = "\n\n".join(pages[start:start + PAGES_PER_CHUNK])
+        if not chunk_text.strip():
+            continue
+        print(f"  · lote {ci}/{n_chunks} (páginas {start + 1}-{min(start + PAGES_PER_CHUNK, len(pages))}) ...")
+        for q in await _extract_chunk(chunk_text, gabarito_text, model):
+            if not isinstance(q, dict):
+                continue  # o modelo às vezes emite item malformado (string) no array
+            num = q.get("numero")
+            enun = (q.get("enunciado") or "").strip()
+            if not isinstance(num, int):
+                sem_num.append(q)
+                continue
+            prev = by_num.get(num)
+            if prev is None or len(enun) > len((prev.get("enunciado") or "")):
+                by_num[num] = q
+        if start + PAGES_PER_CHUNK >= len(pages):
+            break
+    return [by_num[n] for n in sorted(by_num)] + sem_num
 
 
 def _matches_filter(disciplina: str, termos: list[str]) -> bool:
@@ -165,18 +218,30 @@ async def main():
     termos = [t for t in (args.disciplinas or "").split(",") if t.strip()]
 
     print(f"→ Extraindo texto de {args.prova} ...")
-    prova_text = _extract_pdf_text(args.prova)
-    if not prova_text.strip():
+    pages = _extract_pdf_pages(args.prova)
+    if not any(p.strip() for p in pages):
         print("ERRO: PDF da prova sem texto extraível (provavelmente escaneado/imagem). "
               "pdfplumber não faz OCR.", file=sys.stderr)
         sys.exit(1)
+    print(f"  {len(pages)} páginas com texto.")
     gabarito_text = _load_gabarito(args.gabarito)
     if not gabarito_text.strip():
         print("AVISO: sem gabarito oficial — o Claude só incluirá questões com gabarito inequívoco.")
 
-    print(f"→ Extraindo questões com {args.model} ...")
-    questoes = await _extract_questions(prova_text, gabarito_text, args.model)
+    print(f"→ Extraindo questões com {args.model} (em lotes) ...")
+    questoes = await _extract_questions(pages, gabarito_text, args.model)
     print(f"  {len(questoes)} questões retornadas pelo modelo.")
+
+    # relatório de cobertura: expõe questões perdidas (ex.: o modelo às vezes
+    # emite itens malformados em questões com textos de apoio longos e elas são
+    # descartadas). Sem isso a perda seria silenciosa.
+    nums = sorted(q["numero"] for q in questoes if isinstance(q.get("numero"), int))
+    if nums:
+        faltando = [n for n in range(nums[0], nums[-1] + 1) if n not in set(nums)]
+        if faltando:
+            print(f"  ⚠️  cobertura {nums[0]}–{nums[-1]}: faltam {len(faltando)} questões: {faltando}")
+        else:
+            print(f"  cobertura completa: questões {nums[0]}–{nums[-1]}.")
 
     # filtro de disciplina
     questoes = [q for q in questoes if _matches_filter(q.get("disciplina", ""), termos)]
