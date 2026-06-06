@@ -318,6 +318,55 @@ def _strip_preamble(content_md: str) -> str:
     return content_md[m.start():].strip()
 
 
+def _usage_dict(usage) -> dict:
+    web_searches = 0
+    server_tool_use = getattr(usage, "server_tool_use", None)
+    if server_tool_use:
+        web_searches = getattr(server_tool_use, "web_search_requests", 0) or 0
+    return {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
+        "web_search_requests": web_searches,
+    }
+
+
+def _extract_questoes(response) -> list:
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "registrar_questoes":
+            try:
+                return block.input.get("questoes", []) or []
+            except Exception:
+                return []
+    return []
+
+
+async def _force_questoes(
+    topic: str,
+    questions_count: int,
+    model: str,
+    concurso: ConcursoContext,
+    examples: list[dict],
+    bloco_slugs: list[str] | None,
+) -> tuple[list, dict]:
+    """Refaz a chamada FORÇANDO registrar_questoes.
+
+    Usado quando a 1ª tentativa (tool_choice=auto) trouxe o texto mas o modelo
+    não emitiu o tool_use das questões. `tool_choice` forçado é incompatível com
+    extended thinking, então removemos thinking/effort aqui — o texto já veio da
+    1ª tentativa, esta só recupera as questões.
+    """
+    params = _build_params(topic, questions_count, model, concurso, examples, bloco_slugs)
+    params.pop("thinking", None)
+    params.pop("output_config", None)
+    params["tool_choice"] = {"type": "tool", "name": "registrar_questoes"}
+    # web_search não roda sob forced tool_choice; remove p/ evitar conflito.
+    params["tools"] = [t for t in params["tools"] if t.get("name") == "registrar_questoes"]
+    response = await _client.messages.create(**params)
+    return _extract_questoes(response), _usage_dict(response.usage)
+
+
 async def _generate_for_topic(
     topic: str,
     questions_count: int,
@@ -331,32 +380,27 @@ async def _generate_for_topic(
     response = await _client.messages.create(**params)
 
     content_md = ""
-    questions_data = []
-
     for block in response.content:
         if block.type == "text":
             content_md += block.text
-        elif block.type == "tool_use" and block.name == "registrar_questoes":
-            try:
-                questions_data = block.input.get("questoes", [])
-            except Exception:
-                questions_data = []
-
     content_md = _strip_preamble(content_md)
 
-    usage = response.usage
-    web_searches = 0
-    server_tool_use = getattr(usage, "server_tool_use", None)
-    if server_tool_use:
-        web_searches = getattr(server_tool_use, "web_search_requests", 0) or 0
+    questions_data = _extract_questoes(response)
+    usage_dict = _usage_dict(response.usage)
 
-    usage_dict = {
-        "input_tokens": usage.input_tokens,
-        "output_tokens": usage.output_tokens,
-        "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0) or 0,
-        "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
-        "web_search_requests": web_searches,
-    }
+    # Transiente conhecido: com tool_choice=auto o modelo às vezes entrega o
+    # material e encerra o turno SEM chamar registrar_questoes (ex.: TJCE 05/06).
+    # Refaz forçando a tool e soma o usage. Sem esta guarda o dia ficava com 0
+    # questões e era marcado 'done' silenciosamente.
+    if not questions_data:
+        try:
+            questions_data, retry_usage = await _force_questoes(
+                topic, questions_count, model, concurso, examples, bloco_slugs
+            )
+            for k in usage_dict:
+                usage_dict[k] += retry_usage.get(k, 0)
+        except Exception:
+            pass
 
     return content_md, questions_data, usage_dict
 

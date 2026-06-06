@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 from ..db import get_db, AsyncSessionLocal
@@ -361,8 +361,9 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             material.validador_modelo = val_info.get("model")
             material.validacao_status = validacao_status
             material.regenerado_em = regenerado_em
-            material.status = "done"
-            material.error_msg = None
+            # Sem questões = geração quebrada → 'error' (fica visível e regerável).
+            material.status = "done" if questions_data else "error"
+            material.error_msg = None if questions_data else "geração retornou 0 questões"
 
             for i, q in enumerate(questions_data):
                 slug = q.get("bloco_slug")
@@ -477,12 +478,28 @@ async def generate_for_day(day_id: int, model: str | None = None):
     """Used by cron job to generate material for a day without auth."""
     model = model or GENERATION_MODEL
     async with AsyncSessionLocal() as db:
-        # Skip if material already exists
-        existing = await db.execute(
+        # Reaproveita material só se estiver íntegro (done + com questões).
+        # Materiais quebrados (status=error ou 0 questões — ex.: o modelo não
+        # chamou registrar_questoes) são descartados e regerados: assim o cron
+        # se auto-corrige na próxima execução em vez de pular o dia para sempre.
+        existing = (await db.execute(
             select(StudyMaterial).where(StudyMaterial.study_day_id == day_id)
-        )
-        if existing.scalar_one_or_none():
-            return
+        )).scalar_one_or_none()
+        if existing:
+            nq = await db.scalar(
+                select(func.count(GeneratedQuestion.id)).where(
+                    GeneratedQuestion.study_material_id == existing.id
+                )
+            )
+            if existing.status == "done" and nq > 0:
+                return
+            await db.execute(
+                delete(GeneratedQuestion).where(
+                    GeneratedQuestion.study_material_id == existing.id
+                )
+            )
+            await db.delete(existing)
+            await db.commit()
 
         result = await db.execute(
             select(StudyDay)
@@ -530,6 +547,12 @@ async def generate_for_day(day_id: int, model: str | None = None):
     else:
         validacao_status = "warning"
 
+    # Sem questões = geração quebrada. Persiste como 'error' (não 'done') para
+    # ficar visível e para o cron regenerar na próxima execução — em vez de
+    # aceitar silenciosamente um dia sem questões.
+    final_status = "done" if questions_data else "error"
+    final_error = None if questions_data else "geração retornou 0 questões"
+
     async with AsyncSessionLocal() as db:
         material = StudyMaterial(
             study_day_id=day_id,
@@ -545,7 +568,8 @@ async def generate_for_day(day_id: int, model: str | None = None):
             validador_modelo=val_info.get("model"),
             validacao_status=validacao_status,
             regenerado_em=regenerado_em,
-            status="done",
+            status=final_status,
+            error_msg=final_error,
         )
         db.add(material)
         await db.flush()
