@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 import shutil
@@ -138,12 +139,17 @@ async def lifespan(app: FastAPI):
 
     # Generate today's material at startup if past 05:00 and not yet generated.
     # Skip via env var (útil em dev/testes onde a chamada Claude trava startup).
+    # Em background (create_task, NÃO await): a geração leva 5–10 min e com
+    # await o lifespan segura o uvicorn — app inteiro fica 502 até terminar.
+    startup_gen_task = None
     if os.environ.get("SKIP_STARTUP_GEN", "").lower() not in ("1", "true", "yes"):
         now = datetime.now(TZ)
         if now.hour >= 5:
-            await _generate_today_if_needed()
+            startup_gen_task = asyncio.create_task(_generate_today_if_needed())
 
     yield
+    if startup_gen_task and not startup_gen_task.done():
+        startup_gen_task.cancel()
     scheduler.shutdown(wait=False)
 
 
