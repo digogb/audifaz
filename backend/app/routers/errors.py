@@ -25,11 +25,13 @@ def _clean_alternativas(alts) -> Optional[dict]:
 def _to_out(e: ErrorEntry, alternativas: Optional[dict]) -> ErrorEntryOut:
     out = ErrorEntryOut.model_validate(e)
     out.alternativas = alternativas
-    # Erro re-respondível ainda não revisado: gabarito e comentário ficam fora
-    # do payload até a nova tentativa (revisão = responder de novo, não ler).
+    # Erro re-respondível ainda não revisado: gabarito, comentário e a resposta
+    # anterior ficam fora do payload até a nova tentativa (revisão = responder
+    # de novo, não ler — e saber a letra que errou descartaria uma alternativa).
     if alternativas and not e.revisado_em:
         out.gabarito = None
         out.justificativa = None
+        out.sua_resposta = None
     return out
 
 

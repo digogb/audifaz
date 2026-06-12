@@ -54,9 +54,9 @@ function ErrorCard({ error, onReview, onDelete, onAnswered }) {
             )}
             <span className="text-[11px] text-subtle font-mono">{format(parseISO(error.data), 'dd/MM/yy', { locale: ptBR })}</span>
             {reviewed && <span className="text-[11px] text-accent-text font-medium">✓ revisado</span>}
-            {error.sua_resposta && (
+            {error.sua_resposta && gabarito && (
               <span className="text-[11px] text-danger font-mono">
-                {gabarito ? `${error.sua_resposta} → ${gabarito}` : `marcou ${error.sua_resposta}`}
+                {error.sua_resposta} → {gabarito}
               </span>
             )}
           </div>
