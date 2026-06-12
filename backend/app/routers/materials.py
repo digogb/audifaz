@@ -404,6 +404,11 @@ async def generate_material(
 ):
     if model not in ("claude-sonnet-4-6", "claude-opus-4-7", "claude-opus-4-8"):
         raise HTTPException(400, "Modelo inválido")
+    if not claude_client.has_key_for(concurso.slug):
+        raise HTTPException(
+            503,
+            f"Chave Anthropic do concurso '{concurso.slug}' não configurada (fallback desabilitado)",
+        )
 
     await _ensure_day_in_concurso(db, day_id, concurso.id)
     result = await db.execute(
@@ -476,8 +481,20 @@ async def generate_material(
 
 async def generate_for_day(day_id: int, model: str | None = None):
     """Used by cron job to generate material for a day without auth."""
+    import logging
     model = model or GENERATION_MODEL
     async with AsyncSessionLocal() as db:
+        concurso = await _concurso_for_day(db, day_id)
+        if not concurso:
+            return
+        # Antes de qualquer escrita no banco: concurso sem chave própria
+        # obrigatória não gera (e não destrói o material existente).
+        if not claude_client.has_key_for(concurso.slug):
+            logging.getLogger(__name__).warning(
+                "geração pulada (day_id=%s): chave Anthropic de '%s' ausente e fallback desabilitado",
+                day_id, concurso.slug,
+            )
+            return
         # Reaproveita material só se estiver íntegro (done + com questões).
         # Materiais quebrados (status=error ou 0 questões — ex.: o modelo não
         # chamou registrar_questoes) são descartados e regerados: assim o cron
@@ -511,9 +528,6 @@ async def generate_for_day(day_id: int, model: str | None = None):
             return
 
         topics = [t.descricao for t in day.topics]
-        concurso = await _concurso_for_day(db, day_id)
-        if not concurso:
-            return
         focus = await _focus_terms_for_day(db, day.id)
         examples = await _load_examples(db, concurso.banca, seed=day.data.toordinal(), focus_terms=focus)
         bloco_map = await _load_blocos(db, concurso.id)

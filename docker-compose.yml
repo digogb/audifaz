@@ -12,6 +12,8 @@ services:
       # Chave por concurso (opcional): ANTHROPIC_API_KEY_<SLUG maiúscula, '-'→'_'>.
       # Sem ela, o concurso usa a ANTHROPIC_API_KEY padrão.
       - ANTHROPIC_API_KEY_TJCE_2026=${ANTHROPIC_API_KEY_TJCE_2026:-}
+      # Slugs (CSV) que EXIGEM chave própria — sem fallback: não gera sem a chave.
+      - ANTHROPIC_REQUIRE_CONCURSO_KEY=${ANTHROPIC_REQUIRE_CONCURSO_KEY:-}
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}

@@ -241,6 +241,11 @@ async def submit_redacao(
     tema = await db.get(RedacaoTema, body.tema_id)
     if not tema or tema.concurso_id != concurso.id:
         raise HTTPException(404, "Tema não encontrado neste concurso")
+    if not claude_client.has_key_for(concurso.slug):
+        raise HTTPException(
+            503,
+            f"Chave Anthropic do concurso '{concurso.slug}' não configurada (fallback desabilitado)",
+        )
 
     if not current_user.is_internal:
         await check_daily_quota(db, current_user.id, Redacao, "redações", REDACAO_QUOTA_DIA)

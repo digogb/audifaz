@@ -24,16 +24,46 @@ class ConcursoContext:
     slug: Optional[str] = None
 
 
+class MissingConcursoKeyError(RuntimeError):
+    """Concurso exige chave própria (ANTHROPIC_REQUIRE_CONCURSO_KEY) e ela não está no ambiente."""
+
+
+def _env_name_for(slug: str) -> str:
+    return "ANTHROPIC_API_KEY_" + slug.upper().replace("-", "_")
+
+
+def has_key_for(slug: Optional[str]) -> bool:
+    """False apenas quando o slug está em ANTHROPIC_REQUIRE_CONCURSO_KEY (CSV de
+    slugs) e a ANTHROPIC_API_KEY_<SLUG> correspondente não está definida — esses
+    concursos NÃO podem cair na chave padrão (billing separado)."""
+    slug = (slug or "").strip().lower()
+    if not slug:
+        return True
+    required = {
+        s.strip().lower()
+        for s in os.environ.get("ANTHROPIC_REQUIRE_CONCURSO_KEY", "").split(",")
+        if s.strip()
+    }
+    if slug not in required:
+        return True
+    return bool(os.environ.get(_env_name_for(slug), "").strip())
+
+
 def _client_for(concurso: Optional[ConcursoContext]) -> AsyncAnthropic:
     """Client Anthropic do concurso: ANTHROPIC_API_KEY_<SLUG> (maiúsculas,
-    '-'→'_', ex.: ANTHROPIC_API_KEY_TJCE_2026) se definida; senão a chave padrão."""
+    '-'→'_', ex.: ANTHROPIC_API_KEY_TJCE_2026) se definida; senão a chave padrão.
+    Concursos listados em ANTHROPIC_REQUIRE_CONCURSO_KEY não têm fallback."""
     slug = (concurso.slug or "").strip() if concurso else ""
     if not slug:
         return _default_client
-    env_name = "ANTHROPIC_API_KEY_" + slug.upper().replace("-", "_")
-    key = os.environ.get(env_name, "").strip()
+    if not has_key_for(slug):
+        raise MissingConcursoKeyError(
+            f"{_env_name_for(slug)} não definida e fallback na chave padrão desabilitado para '{slug}'"
+        )
+    key = os.environ.get(_env_name_for(slug), "").strip()
     if not key:
         return _default_client
+    env_name = _env_name_for(slug)
     if env_name not in _clients_by_env:
         _clients_by_env[env_name] = AsyncAnthropic(api_key=key)
     return _clients_by_env[env_name]
