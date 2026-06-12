@@ -33,7 +33,7 @@ async def _ensure_day_in_concurso(db: AsyncSession, day_id: int, concurso_id: in
 def _to_ctx(c: Concurso) -> ConcursoContext:
     return ConcursoContext(
         nome=c.nome, banca=c.banca, orgao=c.orgao, cargo=c.cargo,
-        data_prova=c.data_prova, prompt_extra=c.prompt_extra,
+        data_prova=c.data_prova, prompt_extra=c.prompt_extra, slug=c.slug,
     )
 
 
@@ -306,7 +306,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
         content_md, questions_data, usage_dict = await claude_client.generate_material(
             topics, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
         )
-        flags, val_info = await claude_client.validate_material(content_md, questions_data)
+        flags, val_info = await claude_client.validate_material(content_md, questions_data, ctx)
         tentativas = 1
         regenerado_em = None
 
@@ -320,7 +320,7 @@ async def _run_generation_bg(material_id: int, topics: list[str], model: str, co
             content_md2, questions_data2, usage_dict2 = await claude_client.generate_material(
                 topics_with_feedback, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
             )
-            flags2, _ = await claude_client.validate_material(content_md2, questions_data2)
+            flags2, _ = await claude_client.validate_material(content_md2, questions_data2, ctx)
             tentativas = 2
             regenerado_em = datetime.utcnow()
             # Sobrescreve com a segunda versão
@@ -523,7 +523,7 @@ async def generate_for_day(day_id: int, model: str | None = None):
     content_md, questions_data, usage_dict = await claude_client.generate_material(
         topics, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
     )
-    flags, val_info = await claude_client.validate_material(content_md, questions_data)
+    flags, val_info = await claude_client.validate_material(content_md, questions_data, ctx)
     tentativas = 1
     regenerado_em = None
 
@@ -533,7 +533,7 @@ async def generate_for_day(day_id: int, model: str | None = None):
         content_md2, questions_data2, usage_dict2 = await claude_client.generate_material(
             topics_retry, ctx, examples, model, bloco_slugs=list(bloco_map.keys()),
         )
-        flags2, _ = await claude_client.validate_material(content_md2, questions_data2)
+        flags2, _ = await claude_client.validate_material(content_md2, questions_data2, ctx)
         content_md, questions_data, flags = content_md2, questions_data2, flags2
         tentativas = 2
         regenerado_em = datetime.utcnow()

@@ -86,7 +86,7 @@ class RedacaoListItem(BaseModel):
 def _to_ctx(c: Concurso) -> ConcursoContext:
     return ConcursoContext(
         nome=c.nome, banca=c.banca, orgao=c.orgao, cargo=c.cargo,
-        data_prova=c.data_prova, prompt_extra=c.prompt_extra,
+        data_prova=c.data_prova, prompt_extra=c.prompt_extra, slug=c.slug,
     )
 
 

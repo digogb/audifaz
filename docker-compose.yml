@@ -9,6 +9,9 @@ services:
       - ./data:/data
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Chave por concurso (opcional): ANTHROPIC_API_KEY_<SLUG maiúscula, '-'→'_'>.
+      # Sem ela, o concurso usa a ANTHROPIC_API_KEY padrão.
+      - ANTHROPIC_API_KEY_TJCE_2026=${ANTHROPIC_API_KEY_TJCE_2026:-}
       - SECRET_KEY=${SECRET_KEY}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}

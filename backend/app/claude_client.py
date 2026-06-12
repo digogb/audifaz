@@ -1,13 +1,15 @@
 import asyncio
 import json
 import math
+import os
 from dataclasses import dataclass
 from datetime import date
 from typing import Optional
 
 from anthropic import AsyncAnthropic
 
-_client = AsyncAnthropic()
+_default_client = AsyncAnthropic()
+_clients_by_env: dict[str, AsyncAnthropic] = {}
 
 
 @dataclass
@@ -19,6 +21,22 @@ class ConcursoContext:
     cargo: str
     data_prova: Optional[date] = None
     prompt_extra: Optional[str] = None
+    slug: Optional[str] = None
+
+
+def _client_for(concurso: Optional[ConcursoContext]) -> AsyncAnthropic:
+    """Client Anthropic do concurso: ANTHROPIC_API_KEY_<SLUG> (maiúsculas,
+    '-'→'_', ex.: ANTHROPIC_API_KEY_TJCE_2026) se definida; senão a chave padrão."""
+    slug = (concurso.slug or "").strip() if concurso else ""
+    if not slug:
+        return _default_client
+    env_name = "ANTHROPIC_API_KEY_" + slug.upper().replace("-", "_")
+    key = os.environ.get(env_name, "").strip()
+    if not key:
+        return _default_client
+    if env_name not in _clients_by_env:
+        _clients_by_env[env_name] = AsyncAnthropic(api_key=key)
+    return _clients_by_env[env_name]
 
 
 def _fmt_examples_block(banca: str, questoes: list[dict]) -> str:
@@ -363,7 +381,7 @@ async def _force_questoes(
     params["tool_choice"] = {"type": "tool", "name": "registrar_questoes"}
     # web_search não roda sob forced tool_choice; remove p/ evitar conflito.
     params["tools"] = [t for t in params["tools"] if t.get("name") == "registrar_questoes"]
-    response = await _client.messages.create(**params)
+    response = await _client_for(concurso).messages.create(**params)
     return _extract_questoes(response), _usage_dict(response.usage)
 
 
@@ -377,7 +395,7 @@ async def _generate_for_topic(
 ) -> tuple[str, list, dict]:
     """Generate material for a single topic. Returns (content_md, questions, usage)."""
     params = _build_params(topic, questions_count, model, concurso, examples, bloco_slugs)
-    response = await _client.messages.create(**params)
+    response = await _client_for(concurso).messages.create(**params)
 
     content_md = ""
     for block in response.content:
@@ -570,7 +588,7 @@ Avalie segundo a rubrica FCC e chame a ferramenta `registrar_correcao`."""
         {"type": "text", "text": _REDACAO_RUBRICA, "cache_control": {"type": "ephemeral"}},
     ]
 
-    response = await _client.messages.create(
+    response = await _client_for(concurso).messages.create(
         model=model,
         max_tokens=3500,
         system=system_blocks,
@@ -598,7 +616,9 @@ Avalie segundo a rubrica FCC e chame a ferramenta `registrar_correcao`."""
     return correcao, usage_dict
 
 
-async def _validate_with_claude(content_md: str, questions_data: list) -> list[dict]:
+async def _validate_with_claude(
+    content_md: str, questions_data: list, concurso: Optional[ConcursoContext] = None
+) -> list[dict]:
     """Validação interna (fallback) usando Claude. Mesmo provider → menor cobertura."""
     questions_json = json.dumps(questions_data[:8], ensure_ascii=False, indent=2)
     user_msg = (
@@ -608,7 +628,7 @@ async def _validate_with_claude(content_md: str, questions_data: list) -> list[d
         f"--- QUESTÕES (amostra) ---\n{questions_json[:6000]}"
     )
     try:
-        response = await _client.messages.create(
+        response = await _client_for(concurso).messages.create(
             model="claude-sonnet-4-6",
             max_tokens=1500,
             system=_VALIDATION_SYSTEM,
@@ -624,20 +644,21 @@ async def _validate_with_claude(content_md: str, questions_data: list) -> list[d
     return []
 
 
-async def validate_material(content_md: str, questions_data: list) -> tuple[list[dict], dict]:
+async def validate_material(
+    content_md: str, questions_data: list, concurso: Optional[ConcursoContext] = None
+) -> tuple[list[dict], dict]:
     """Validação cross-provider: prefere OpenAI (modelo de outro provedor),
     cai pra Claude se OpenAI não estiver configurado.
 
     Retorna (flags, info) onde info inclui provider e modelo usados.
     """
-    import os
     from .services.openai_validator import validate_with_openai, OPENAI_API_KEY, OPENAI_VALIDATOR_MODEL
 
     if OPENAI_API_KEY:
         flags = await validate_with_openai(content_md, questions_data)
         return flags, {"provider": "openai", "model": OPENAI_VALIDATOR_MODEL}
 
-    flags = await _validate_with_claude(content_md, questions_data)
+    flags = await _validate_with_claude(content_md, questions_data, concurso)
     return flags, {"provider": "anthropic", "model": "claude-sonnet-4-6"}
 
 
