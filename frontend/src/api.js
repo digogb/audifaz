@@ -62,6 +62,7 @@ export const getStaleCount = () => api.get('/errors/stale-count')
 export const getDisciplines = () => api.get('/errors/disciplines')
 export const createError = (data) => api.post('/errors', data)
 export const markErrorReviewed = (id) => api.put(`/errors/${id}/review`)
+export const answerError = (id, alternativa) => api.put(`/errors/${id}/answer`, { alternativa })
 export const deleteError = (id) => api.delete(`/errors/${id}`)
 
 // Mocks

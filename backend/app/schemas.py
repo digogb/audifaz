@@ -108,10 +108,18 @@ class ErrorEntryOut(BaseModel):
     subtopico: Optional[str] = None
     banca: Optional[str] = None
     enunciado: str
-    gabarito: str
+    # None quando o erro é re-respondível e ainda não foi revisado — o gabarito
+    # não vaza no payload antes da nova tentativa (mesma regra do material).
+    gabarito: Optional[str] = None
     sua_resposta: Optional[str] = None
     justificativa: Optional[str] = None
     revisado_em: Optional[datetime] = None
+    # Alternativas da questão gerada vinculada (A–E); None em erro manual.
+    alternativas: Optional[dict] = None
+
+
+class ErrorAnswerIn(BaseModel):
+    alternativa: str
 
 
 class ErrorEntryCreate(BaseModel):
